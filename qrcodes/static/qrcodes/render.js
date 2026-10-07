@@ -1,11 +1,11 @@
 /* Renderizado de QR: SVG con diseño + marco, y exportación a PNG/JPG/WEBP/SVG/PDF */
 (function () {
   const DEFAULT_DESIGN = {
-    dotType: 'rounded', dotColor: '#0b2e6b', gradOn: false, dotColor2: '#059669', gradType: 'linear',
-    cornerSq: 'extra-rounded', cornerSqColor: '#0b2e6b', cornerDot: 'dot', cornerDotColor: '#0b2e6b',
+    dotType: 'rounded', dotColor: '#09477e', gradOn: false, dotColor2: '#1369ae', gradType: 'linear',
+    cornerSq: 'extra-rounded', cornerSqColor: '#09477e', cornerDot: 'dot', cornerDotColor: '#09477e',
     bgColor: '#ffffff', bgTransparent: false, margin: 20, ecl: 'M',
     logo: null, logoSize: 0.3, logoMargin: 6, logoHideDots: true,
-    frameOn: false, frameText: 'ESCANÉAME', frameColor: '#0b2e6b', frameTextColor: '#ffffff', frameFont: 56, frameRadius: 40,
+    frameOn: false, frameText: 'ESCANÉAME', frameColor: '#09477e', frameTextColor: '#ffffff', frameFont: 56, frameRadius: 40,
   };
 
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -166,13 +166,13 @@
         <div class="card-right">
           <button class="icon-btn kebab" data-act="menu" title="Más opciones">⋮</button>
           <div class="type">🔗 URL dinámica</div>
-          <h3 class="qname"><span>${esc(q.name)}</span> <button class="icon-btn tiny green" data-act="rename" title="Renombrar">✎</button></h3>
+          <h3 class="qname"><span>${esc(q.name)}</span> <button class="icon-btn tiny brand" data-act="rename" title="Renombrar">✎</button></h3>
           <div class="muted small">Actualizado ${fmtDate(q.updatedAt)}</div>
           <div class="meta">📁 ${folder ? esc(folder.name) : '<span class="muted">Sin carpeta</span>'}</div>
           <div class="meta"><a href="${esc(q.shortUrl)}" target="_blank" rel="noopener">🔗 ${esc(q.shortUrl.replace(/^https?:\/\//, ''))}</a>
             <button class="icon-btn tiny" data-act="copy" title="Copiar URL corta">⧉</button></div>
           <div class="meta dest"><span class="trunc" title="${esc(q.url)}">↗ ${esc(q.url)}</span>
-            <button class="icon-btn tiny green" data-act="editurl" title="Editar URL de destino">✎</button></div>
+            <button class="icon-btn tiny brand" data-act="editurl" title="Editar URL de destino">✎</button></div>
           <div class="meta link" data-act="content">✎ Editar contenido</div>
           <div class="meta link" data-act="design">🎨 Editar diseño</div>
         </div>`;
