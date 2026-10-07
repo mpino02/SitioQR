@@ -1,0 +1,198 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23059669'/%3E%3Cpath fill='%23fff' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6zm12 0h3v3h-3zm5 0h3v3h-3zm-5 5h3v3h-3zm5 0h3v3h-3z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{% static 'qrcodes/styles.css' %}">
+</head>
+<body>
+  <!-- Login -->
+  <div id="login" class="login hidden">
+    <form id="loginForm" class="login-card">
+      <div class="brand big"><span class="logo-mark"></span><span class="app-name">PY QR</span></div>
+      <p class="muted">Ingresa con tu usuario</p>
+      <input id="loginUser" placeholder="Usuario" autocomplete="username" required>
+      <input type="password" id="loginPw" placeholder="Contraseña" autocomplete="current-password" required>
+      <button class="btn primary" type="submit">Entrar</button>
+      <p id="loginErr" class="error"></p>
+    </form>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Menú">☰</button>
+      <div class="brand"><span class="logo-mark"></span><span class="app-name">PY QR</span></div>
+      <div class="spacer"></div>
+      <span class="user-name" id="userName"></span>
+      <a class="btn ghost-light hidden" id="adminLink" href="/admin/" target="_blank">Usuarios</a>
+      <button class="btn ghost-light" id="logoutBtn">Cerrar sesión</button>
+    </header>
+    <aside class="sidebar" id="sidebar">
+      <button class="btn outline-green block" data-action="create">＋ Crear código QR</button>
+      <div class="nav-title">Códigos QR</div>
+      <a class="nav-item" data-view="active">Activos</a>
+      <a class="nav-item" data-view="archived">Archivados</a>
+      <a class="nav-item" data-view="stats">Estadísticas</a>
+      <div class="sep"></div>
+      <div class="nav-title">Plantillas</div>
+      <a class="nav-item" data-view="templates">Diseños guardados</a>
+      <div class="sep"></div>
+      <div class="nav-title">Carpetas</div>
+      <button class="btn primary block small" id="newFolderBtn">＋ Nueva carpeta</button>
+      <div id="folderList"></div>
+    </aside>
+    <main class="main" id="main"></main>
+  </div>
+
+  <!-- Editor -->
+  <div id="editor" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card editor-card">
+      <div class="modal-head">
+        <h2 id="editorTitle">Crear código QR</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">✕</button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-form">
+          <div class="tabs">
+            <button class="tab active" data-tab="content">1. Contenido</button>
+            <button class="tab" data-tab="design">2. Diseño</button>
+            <button class="tab" data-tab="logo">3. Logo</button>
+            <button class="tab" data-tab="frame">4. Marco</button>
+          </div>
+
+          <section class="tab-pane" data-pane="content">
+            <label>Nombre del QR<input id="f_name" placeholder="Ej: TIPOLOGÍA J ESPEJO"></label>
+            <label>URL de destino (se puede cambiar después sin reimprimir)<input id="f_url" type="url" placeholder="https://..."></label>
+            <label>Carpeta<select id="f_folder"></select></label>
+            <label>Código corto (opcional)
+              <div class="input-prefix"><span id="prefixBase"></span><input id="f_code" placeholder="automático"></div>
+            </label>
+            <p class="hint">El QR apunta a la URL corta. Al cambiar la URL de destino, el mismo QR impreso redirige al nuevo enlace.</p>
+          </section>
+
+          <section class="tab-pane hidden" data-pane="design">
+            <div class="row">
+              <label>Plantilla<select id="f_template"><option value="">— Aplicar diseño guardado —</option></select></label>
+              <button class="btn small outline" id="saveTemplateBtn" type="button">Guardar como plantilla</button>
+            </div>
+            <h4>Puntos</h4>
+            <div class="row">
+              <label>Estilo<select id="d_dotType">
+                <option value="square">Cuadrado</option><option value="rounded">Redondeado</option>
+                <option value="dots">Círculos</option><option value="classy">Clásico</option>
+                <option value="classy-rounded">Clásico redondeado</option><option value="extra-rounded">Extra redondeado</option>
+              </select></label>
+              <label>Color<input type="color" id="d_dotColor"></label>
+            </div>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="d_gradOn"> Degradado</label>
+              <label>Color 2<input type="color" id="d_dotColor2"></label>
+              <label>Tipo<select id="d_gradType"><option value="linear">Lineal</option><option value="radial">Radial</option></select></label>
+            </div>
+            <h4>Esquinas</h4>
+            <div class="row">
+              <label>Marco esquina<select id="d_cornerSq">
+                <option value="square">Cuadrado</option><option value="extra-rounded">Redondeado</option><option value="dot">Círculo</option>
+              </select></label>
+              <label>Color<input type="color" id="d_cornerSqColor"></label>
+            </div>
+            <div class="row">
+              <label>Punto esquina<select id="d_cornerDot">
+                <option value="square">Cuadrado</option><option value="dot">Círculo</option>
+              </select></label>
+              <label>Color<input type="color" id="d_cornerDotColor"></label>
+            </div>
+            <h4>Fondo</h4>
+            <div class="row">
+              <label>Color<input type="color" id="d_bgColor"></label>
+              <label class="check"><input type="checkbox" id="d_bgTransparent"> Transparente</label>
+            </div>
+            <div class="row">
+              <label>Margen<input type="range" id="d_margin" min="0" max="80" step="2"></label>
+              <label>Corrección de errores<select id="d_ecl">
+                <option value="L">Baja (7%)</option><option value="M">Media (15%)</option>
+                <option value="Q">Alta (25%)</option><option value="H">Máxima (30%)</option>
+              </select></label>
+            </div>
+          </section>
+
+          <section class="tab-pane hidden" data-pane="logo">
+            <div class="logo-drop" id="logoDrop">
+              <img id="logoPreview" alt="">
+              <div>
+                <input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
+                <button class="btn outline small" type="button" id="logoPick">Subir logo</button>
+                <button class="btn small danger-text" type="button" id="logoRemove">Quitar</button>
+                <p class="hint">PNG, JPG, SVG o WEBP. Recomendado: fondo transparente, cuadrado. Al usar logo se sube automáticamente la corrección de errores.</p>
+              </div>
+            </div>
+            <div class="row">
+              <label>Tamaño del logo<input type="range" id="d_logoSize" min="0.1" max="0.5" step="0.01"></label>
+              <label>Espacio alrededor<input type="range" id="d_logoMargin" min="0" max="20" step="1"></label>
+            </div>
+            <label class="check"><input type="checkbox" id="d_logoHideDots"> Ocultar puntos detrás del logo</label>
+          </section>
+
+          <section class="tab-pane hidden" data-pane="frame">
+            <label class="check"><input type="checkbox" id="d_frameOn"> Agregar marco con texto</label>
+            <label>Texto<input id="d_frameText" placeholder="Ej: ESCANÉAME"></label>
+            <div class="row">
+              <label>Color del marco<input type="color" id="d_frameColor"></label>
+              <label>Color del texto<input type="color" id="d_frameTextColor"></label>
+            </div>
+            <div class="row">
+              <label>Tamaño texto<input type="range" id="d_frameFont" min="30" max="120" step="2"></label>
+              <label>Esquinas<input type="range" id="d_frameRadius" min="0" max="80" step="2"></label>
+            </div>
+          </section>
+        </div>
+
+        <div class="editor-preview">
+          <div class="preview-box"><img id="previewImg" alt="Vista previa del QR"></div>
+          <p class="hint center" id="previewUrl"></p>
+          <div class="dl-box">
+            <div class="row">
+              <label>Tamaño (px)<select id="dlSize">
+                <option>512</option><option selected>1024</option><option>2048</option><option>4096</option>
+              </select></label>
+              <label>PDF ancho (cm)<input id="dlPdfCm" type="number" min="2" max="100" value="10"></label>
+            </div>
+            <div class="dl-buttons">
+              <button class="btn small" data-dl="png">PNG</button>
+              <button class="btn small" data-dl="jpg">JPG</button>
+              <button class="btn small" data-dl="webp">WEBP</button>
+              <button class="btn small" data-dl="svg">SVG</button>
+              <button class="btn small" data-dl="pdf">PDF</button>
+            </div>
+            <p class="hint">Antes de guardar, la descarga apunta a una URL provisoria. Guarda primero para obtener el QR definitivo.</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <p id="editorErr" class="error"></p>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="saveQrBtn">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal genérico -->
+  <div id="dialog" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card small-card">
+      <div class="modal-head"><h3 id="dialogTitle"></h3><button class="icon-btn" data-close aria-label="Cerrar">✕</button></div>
+      <div id="dialogBody" class="dialog-body"></div>
+      <div class="modal-foot" id="dialogFoot"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="{% static 'qrcodes/vendor/qr-code-styling.js' %}"></script>
+  <script src="{% static 'qrcodes/vendor/jspdf.umd.min.js' %}"></script>
+  <script src="{% static 'qrcodes/render.js' %}"></script>
+  <script src="{% static 'qrcodes/app.js' %}"></script>
+</body>
+</html>
