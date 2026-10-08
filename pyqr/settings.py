@@ -91,10 +91,14 @@ if os.environ.get("DB_ENGINE", "sqlite") == "postgresql":
             "PORT": os.environ.get("DB_PORT", "5432"),
         }
     }
-else:
-    DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+if os.environ.get("DB_ENGINE", "sqlite") != "postgresql":
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / "db.sqlite3"}}
+
+# PDF subidos (fichas). Se sirven solo a usuarios autenticados mediante la API, no como archivos públicos.
+MEDIA_ROOT = DATA_DIR / "media"
+FICHA_MAX_MB = int(os.environ.get("FICHA_MAX_MB", "50"))
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

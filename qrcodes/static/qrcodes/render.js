@@ -120,5 +120,5 @@
     downloadUrl(dataUrl, `${base}.${format}`);
   }
 
-  window.QRRender = { DEFAULT_DESIGN, buildSvg, svgToDataUrl, download, safeName };
+  window.QRRender = { DEFAULT_DESIGN, buildSvg, svgToDataUrl, svgSize, rasterize, downloadUrl, download, safeName };
 })();

@@ -57,6 +57,32 @@ class ScanStat(models.Model):
         constraints = [models.UniqueConstraint(fields=["qr", "day", "device"], name="uniq_scan_stat")]
 
 
+def ficha_upload_to(instance, filename):
+    return f"fichas/{secrets.token_hex(8)}.pdf"
+
+
+class Ficha(models.Model):
+    """PDF subido (plano / ficha de coordinación) con QR posicionados encima."""
+    name = models.CharField("nombre", max_length=200)
+    file = models.FileField("archivo PDF", upload_to=ficha_upload_to)
+    original_name = models.CharField("nombre original", max_length=255, blank=True)
+    size = models.PositiveIntegerField("tamaño (bytes)", default=0)
+    folder = models.ForeignKey(Folder, null=True, blank=True, on_delete=models.SET_NULL, related_name="fichas", verbose_name="carpeta")
+    # Lista de {"qrId", "page", "x", "y", "w"}: x, y y w son fracciones (0-1) del ancho/alto visible de la página
+    placements = models.JSONField("QR posicionados", default=list, blank=True)
+    created_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "ficha PDF"
+        verbose_name_plural = "fichas PDF"
+
+    def __str__(self):
+        return self.name
+
+
 class DesignTemplate(models.Model):
     name = models.CharField("nombre", max_length=120)
     design = models.JSONField("diseño", default=dict)

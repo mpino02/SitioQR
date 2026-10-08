@@ -40,6 +40,9 @@
       <a class="nav-item" data-view="archived">Archivados</a>
       <a class="nav-item" data-view="stats">Estadísticas</a>
       <div class="sep"></div>
+      <div class="nav-title">Fichas</div>
+      <a class="nav-item" data-view="fichas">Fichas PDF</a>
+      <div class="sep"></div>
       <div class="nav-title">Plantillas</div>
       <a class="nav-item" data-view="templates">Diseños guardados</a>
       <div class="sep"></div>
@@ -182,6 +185,53 @@
     </div>
   </div>
 
+  <!-- Editor de fichas PDF -->
+  <div id="fichaEditor" class="fe hidden" role="dialog" aria-modal="true" aria-labelledby="feTitle">
+    <div class="fe-head">
+      <button class="icon-btn fe-close" id="feClose" aria-label="Cerrar">←</button>
+      <h2 id="feTitle"></h2>
+      <span class="fe-status" id="feStatus"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost-light" id="feDownload">⬇ Descargar PDF con QR</button>
+      <button class="btn accent" id="feSave">Guardar</button>
+    </div>
+    <div class="fe-body">
+      <aside class="fe-side">
+        <h4>Agregar código QR</h4>
+        <label>Carpeta<select id="feFolder"></select></label>
+        <input id="feSearch" type="search" placeholder="Buscar QR por nombre o código">
+        <p class="hint">Haz clic en un QR para ponerlo en la página, o arrástralo sobre el plano.</p>
+        <div class="fe-qrlist" id="feQrList"></div>
+        <div class="fe-selpanel hidden" id="feSel">
+          <h4>QR seleccionado</h4>
+          <div class="fe-selname" id="feSelName"></div>
+          <label>Tamaño <span class="muted" id="feSizeLbl"></span><input type="range" id="feSize" min="0.5" max="40" step="0.1"></label>
+          <div class="fe-selbtns">
+            <button class="btn small" id="feDup" type="button">Duplicar</button>
+            <button class="btn small" id="feSameSize" type="button" title="Aplica este tamaño a todos los QR de la página">Mismo tamaño a todos</button>
+            <button class="btn small danger-text" id="feRemove" type="button">Quitar</button>
+          </div>
+          <p class="hint">Arrastra para mover · esquina inferior derecha para cambiar tamaño · flechas para ajuste fino · Supr para quitar.</p>
+        </div>
+      </aside>
+      <div class="fe-main">
+        <div class="fe-toolbar">
+          <button class="btn small" id="fePrev" aria-label="Página anterior">‹</button>
+          <span id="fePageLbl"></span>
+          <button class="btn small" id="feNext" aria-label="Página siguiente">›</button>
+          <div class="spacer"></div>
+          <button class="btn small" id="feZoomOut" aria-label="Alejar">−</button>
+          <span id="feZoomLbl" class="fe-zoomlbl"></span>
+          <button class="btn small" id="feZoomIn" aria-label="Acercar">+</button>
+          <button class="btn small" id="feZoomFit">Ajustar</button>
+        </div>
+        <div class="fe-viewport" id="feViewport">
+          <div class="fe-page" id="fePage"><div class="fe-overlay" id="feOverlay"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal genérico -->
   <div id="dialog" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card small-card">
@@ -195,7 +245,11 @@
 
   <script src="{% static 'qrcodes/vendor/qr-code-styling.js' %}"></script>
   <script src="{% static 'qrcodes/vendor/jspdf.umd.min.js' %}"></script>
+  <script src="{% static 'qrcodes/vendor/pdf.min.js' %}"></script>
+  <script src="{% static 'qrcodes/vendor/pdf-lib.min.js' %}"></script>
+  <script>window.PDFJS_WORKER = "{% static 'qrcodes/vendor/pdf.worker.min.js' %}";</script>
   <script src="{% static 'qrcodes/render.js' %}"></script>
   <script src="{% static 'qrcodes/app.js' %}"></script>
+  <script src="{% static 'qrcodes/fichas.js' %}"></script>
 </body>
 </html>

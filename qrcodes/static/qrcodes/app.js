@@ -13,10 +13,11 @@
     return m ? decodeURIComponent(m[1]) : '';
   }
   async function api(path, opts = {}) {
+    const isForm = opts.body instanceof FormData;
     const res = await fetch('/api' + path, {
       method: opts.method || 'GET',
-      headers: Object.assign({ 'X-CSRFToken': csrfToken() }, opts.body ? { 'Content-Type': 'application/json' } : {}),
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      headers: Object.assign({ 'X-CSRFToken': csrfToken() }, opts.body && !isForm ? { 'Content-Type': 'application/json' } : {}),
+      body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined,
       credentials: 'same-origin',
     });
     if (res.status === 401 && path !== '/login') { showLogin(); throw new Error('Sesión expirada'); }
@@ -117,6 +118,7 @@
     setActiveNav();
     if (state.view === 'stats') return renderStats();
     if (state.view === 'templates') return renderTemplates();
+    if (state.view === 'fichas') return window.PYFichas.renderList();
     return renderList();
   }
 
@@ -491,6 +493,9 @@
     menuEl.style.top = (r.bottom + mh + 8 > window.innerHeight ? r.top - mh - 4 : r.bottom + 4) + window.scrollY + 'px';
     setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
   }
+
+  // Compartido con fichas.js
+  window.PYQR = { state, api, toast, esc, fmtDate, openDialog, promptDialog, confirmDialog, showMenu };
 
   init();
 })();

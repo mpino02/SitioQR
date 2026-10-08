@@ -17,4 +17,7 @@ urlpatterns = [
     path("api/folders/<int:pk>", views.folder_detail),
     path("api/templates", views.templates),
     path("api/templates/<int:pk>", views.template_detail),
+    path("api/fichas", views.fichas),
+    path("api/fichas/<int:pk>", views.ficha_detail),
+    path("api/fichas/<int:pk>/file", views.ficha_file),
 ]

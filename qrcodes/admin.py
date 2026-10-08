@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import DesignTemplate, Folder, QRCode, ScanStat
+from .models import DesignTemplate, Ficha, Folder, QRCode, ScanStat
 
 
 @admin.register(QRCode)
@@ -26,6 +26,14 @@ class FolderAdmin(admin.ModelAdmin):
 @admin.register(DesignTemplate)
 class DesignTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "created_at")
+
+
+@admin.register(Ficha)
+class FichaAdmin(admin.ModelAdmin):
+    list_display = ("name", "folder", "original_name", "updated_at")
+    list_filter = ("folder",)
+    search_fields = ("name", "original_name")
+    readonly_fields = ("file", "size", "placements", "created_by", "created_at", "updated_at")
 
 
 @admin.register(ScanStat)

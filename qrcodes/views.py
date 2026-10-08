@@ -7,14 +7,14 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q, Sum
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .models import DesignTemplate, Folder, QRCode, ScanStat, generate_code
+from .models import DesignTemplate, Ficha, Folder, QRCode, ScanStat, generate_code
 
 CODE_RE = re.compile(r"^[A-Za-z0-9_-]{3,40}$")
 URL_RE = re.compile(r"^(https?://[^\s]+|mailto:[^\s]+|tel:[^\s]+)$", re.I)
@@ -294,3 +294,111 @@ def templates(request):
 def template_detail(request, pk):
     get_object_or_404(DesignTemplate, pk=pk).delete()
     return JsonResponse({"ok": True})
+
+
+# ---------- fichas PDF ----------
+MAX_PLACEMENTS = 1000
+
+
+def ficha_json(f, full=False):
+    data = {
+        "id": str(f.id), "name": f.name, "originalName": f.original_name, "size": f.size,
+        "folderId": str(f.folder_id) if f.folder_id else None,
+        "qrCount": len(f.placements or []),
+        "createdAt": f.created_at.isoformat(), "updatedAt": f.updated_at.isoformat(),
+        "fileUrl": f"/api/fichas/{f.id}/file",
+    }
+    if full:
+        data["placements"] = f.placements or []
+    return data
+
+
+def clean_placements(raw):
+    """Valida la lista de QR posicionados; devuelve (lista, error)."""
+    if not isinstance(raw, list) or len(raw) > MAX_PLACEMENTS:
+        return None, "Lista de QR posicionados inválida"
+    out = []
+    for p in raw:
+        try:
+            item = {
+                "qrId": str(int(p["qrId"])), "page": int(p["page"]),
+                "x": float(p["x"]), "y": float(p["y"]), "w": float(p["w"]),
+            }
+        except (KeyError, TypeError, ValueError):
+            return None, "QR posicionado con datos inválidos"
+        if item["page"] < 1 or not (0 < item["w"] <= 1) or not (-1 <= item["x"] <= 2) or not (-1 <= item["y"] <= 2):
+            return None, "QR posicionado fuera de la página"
+        out.append(item)
+    ids = {p["qrId"] for p in out}
+    if len(ids) != QRCode.objects.filter(pk__in=ids).count():
+        return None, "Uno de los QR posicionados ya no existe"
+    return out, None
+
+
+@api_login_required
+@require_http_methods(["GET", "POST"])
+def fichas(request):
+    if request.method == "GET":
+        qs = Ficha.objects.all()
+        if request.GET.get("folder"):
+            qs = qs.filter(folder_id=request.GET["folder"])
+        if request.GET.get("q"):
+            qs = qs.filter(name__icontains=request.GET["q"])
+        return JsonResponse([ficha_json(f) for f in qs], safe=False)
+
+    up = request.FILES.get("file")
+    if not up:
+        return err("Selecciona un archivo PDF")
+    if up.size > settings.FICHA_MAX_MB * 1024 * 1024:
+        return err(f"El PDF supera el máximo de {settings.FICHA_MAX_MB} MB")
+    head = up.read(1024)
+    up.seek(0)
+    if b"%PDF-" not in head:
+        return err("El archivo no es un PDF válido")
+    name = str(request.POST.get("name") or "").strip() or re.sub(r"\.pdf$", "", up.name, flags=re.I)
+    folder_id = request.POST.get("folderId")
+    folder = Folder.objects.filter(pk=folder_id).first() if folder_id else None
+    f = Ficha(name=name[:200], original_name=up.name[:255], size=up.size, folder=folder, created_by=request.user)
+    f.file.save("ficha.pdf", up, save=False)
+    f.save()
+    return JsonResponse(ficha_json(f, full=True), status=201)
+
+
+@api_login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def ficha_detail(request, pk):
+    f = get_object_or_404(Ficha, pk=pk)
+    if request.method == "GET":
+        return JsonResponse(ficha_json(f, full=True))
+    if request.method == "DELETE":
+        f.file.delete(save=False)
+        f.delete()
+        return JsonResponse({"ok": True})
+
+    data = body(request)
+    if "name" in data:
+        name = str(data["name"] or "").strip()
+        if not name:
+            return err("El nombre es obligatorio")
+        f.name = name[:200]
+    if "folderId" in data:
+        f.folder = Folder.objects.filter(pk=data["folderId"]).first() if data["folderId"] else None
+    if "placements" in data:
+        placements, error = clean_placements(data["placements"])
+        if error:
+            return err(error)
+        f.placements = placements
+    f.save()
+    return JsonResponse(ficha_json(f, full=True))
+
+
+@api_login_required
+@require_GET
+def ficha_file(request, pk):
+    f = get_object_or_404(Ficha, pk=pk)
+    try:
+        fh = f.file.open("rb")
+    except FileNotFoundError:
+        return err("No se encontró el archivo PDF", 404)
+    filename = f.original_name or f"{f.name}.pdf"
+    return FileResponse(fh, content_type="application/pdf", filename=filename)
