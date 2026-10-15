@@ -4,21 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }}</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2309477e'/%3E%3Cpath fill='%23fff' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6zm12 0h3v3h-3zm5 0h3v3h-3zm-5 5h3v3h-3zm5 0h3v3h-3z'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23c19253'/%3E%3Cpath fill='%23fff' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6zm12 0h3v3h-3zm5 0h3v3h-3zm-5 5h3v3h-3zm5 0h3v3h-3z'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="{% static 'qrcodes/styles.css' %}">
 </head>
 <body>
   <!-- Login -->
   <div id="login" class="login hidden">
     <form id="loginForm" class="login-card">
-      <div class="brand big"><img class="login-logo" src="{% static 'qrcodes/img/logo-vertical.svg' %}" alt="Inmobiliaria PY"><span class="app-name">PY QR</span></div>
-      <p class="muted">Ingresa con tu usuario</p>
-      <input id="loginUser" placeholder="Usuario" autocomplete="username" required>
-      <input type="password" id="loginPw" placeholder="Contraseña" autocomplete="current-password" required>
-      <button class="btn primary" type="submit">Entrar</button>
+      <div class="brand big"><img class="login-logo" src="{% static 'qrcodes/img/logo_carran.svg' %}" alt="Constructora Carrán"><span class="app-name">PY QR</span></div>
+      <a class="btn ms-login hidden" id="msLoginBtn" href="/auth/microsoft/login">
+        <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><path fill="#f25022" d="M1 1h9v9H1z"/><path fill="#7fba00" d="M11 1h9v9h-9z"/><path fill="#00a4ef" d="M1 11h9v9H1z"/><path fill="#ffb900" d="M11 11h9v9h-9z"/></svg>
+        Ingresar con Microsoft
+      </a>
+      <div class="login-sep hidden" id="loginSep"><span>o con tu usuario</span></div>
+      <div class="local-login" id="localLogin">
+        <p class="muted" id="localLoginHint">Ingresa con tu usuario</p>
+        <input id="loginUser" placeholder="Usuario" autocomplete="username" required>
+        <input type="password" id="loginPw" placeholder="Contraseña" autocomplete="current-password" required>
+        <button class="btn primary" type="submit">Entrar</button>
+      </div>
       <p id="loginErr" class="error"></p>
     </form>
   </div>
@@ -27,14 +34,18 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Menú">☰</button>
-      <div class="brand"><img class="topbar-logo" src="{% static 'qrcodes/img/logo_header.svg' %}" alt="Inmobiliaria PY"><span class="brand-sep"></span><span class="app-name">PY QR</span></div>
+      <div class="brand"><img class="topbar-logo" src="{% static 'qrcodes/img/logo_carran.svg' %}" alt="Constructora Carrán"><span class="brand-sep"></span><span class="app-name">PY QR</span></div>
+      <span class="crumb" id="crumb"></span>
       <div class="spacer"></div>
+      <select class="area-sel hidden" id="areaSel" aria-label="Área"></select>
+      <span class="area-badge hidden" id="areaBadge"></span>
       <span class="user-name" id="userName"></span>
-      <a class="btn ghost-light hidden" id="adminLink" href="/admin/" target="_blank">Usuarios</a>
+      <span class="role-badge" id="roleBadge"></span>
       <button class="btn ghost-light" id="logoutBtn">Cerrar sesión</button>
     </header>
     <aside class="sidebar" id="sidebar">
-      <button class="btn outline-brand block" data-action="create">＋ Crear código QR</button>
+      <div class="side-brand"><img src="{% static 'qrcodes/img/logo_carran_light.svg' %}" alt="Constructora Carrán"><span class="app-name">PY QR</span></div>
+      <button class="btn outline-brand block needs-edit" data-action="create">＋ Crear código QR</button>
       <div class="nav-title">Códigos QR</div>
       <a class="nav-item" data-view="active">Activos</a>
       <a class="nav-item" data-view="archived">Archivados</a>
@@ -45,9 +56,14 @@
       <div class="sep"></div>
       <div class="nav-title">Plantillas</div>
       <a class="nav-item" data-view="templates">Diseños guardados</a>
+      <div class="hidden" id="adminNav">
+        <div class="sep"></div>
+        <div class="nav-title">Administración</div>
+        <a class="nav-item" data-view="users">Usuarios y áreas</a>
+      </div>
       <div class="sep"></div>
       <div class="nav-title">Carpetas</div>
-      <button class="btn primary block small" id="newFolderBtn">＋ Nueva carpeta</button>
+      <button class="btn primary block small needs-edit" id="newFolderBtn">＋ Nueva carpeta</button>
       <div id="folderList"></div>
     </aside>
     <main class="main" id="main"></main>
@@ -82,7 +98,7 @@
           <section class="tab-pane hidden" data-pane="design">
             <div class="row">
               <label>Plantilla<select id="f_template"><option value="">— Aplicar diseño guardado —</option></select></label>
-              <button class="btn small outline" id="saveTemplateBtn" type="button">Guardar como plantilla</button>
+              <button class="btn small outline needs-edit" id="saveTemplateBtn" type="button">Guardar como plantilla</button>
             </div>
             <h4>Puntos</h4>
             <div class="row">
@@ -180,7 +196,7 @@
       <div class="modal-foot">
         <p id="editorErr" class="error"></p>
         <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="saveQrBtn">Guardar</button>
+        <button class="btn primary needs-edit" id="saveQrBtn">Guardar</button>
       </div>
     </div>
   </div>
@@ -193,7 +209,7 @@
       <span class="fe-status" id="feStatus"></span>
       <div class="spacer"></div>
       <button class="btn ghost-light" id="feDownload">⬇ Descargar PDF con QR</button>
-      <button class="btn accent" id="feSave">Guardar</button>
+      <button class="btn accent needs-edit" id="feSave">Guardar</button>
     </div>
     <div class="fe-body">
       <aside class="fe-side">
@@ -251,5 +267,6 @@
   <script src="{% static 'qrcodes/render.js' %}"></script>
   <script src="{% static 'qrcodes/app.js' %}"></script>
   <script src="{% static 'qrcodes/fichas.js' %}"></script>
+  <script src="{% static 'qrcodes/users.js' %}"></script>
 </body>
 </html>

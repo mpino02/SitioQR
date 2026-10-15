@@ -5,6 +5,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const { DEFAULT_DESIGN, buildSvg, svgToDataUrl, download } = window.QRRender;
 
+  const ROLE_LABELS = { superadmin: 'Super admin', admin: 'Administrador', viewer: 'Visualización' };
   const state = { config: null, view: 'active', folder: null, search: '', sort: 'created', folders: [], templates: [], editing: null, design: null };
 
   // ---------- API ----------
@@ -47,14 +48,35 @@
   function showLogin() {
     $('#app').classList.add('hidden');
     $('#login').classList.remove('hidden');
-    $('#loginUser').focus();
+    const { microsoftLogin, localLogin } = state.config;
+    $('#msLoginBtn').classList.toggle('hidden', !microsoftLogin);
+    $('#loginSep').classList.toggle('hidden', !(microsoftLogin && localLogin));
+    $('#localLoginHint').classList.toggle('hidden', microsoftLogin);
+    $('#localLogin').classList.toggle('hidden', !localLogin);
+    $$('#localLogin input').forEach(i => (i.disabled = !localLogin));
+    const loginError = new URLSearchParams(location.search).get('login_error');
+    if (loginError) { $('#loginErr').textContent = loginError; history.replaceState(null, '', location.pathname); }
+    if (localLogin) $('#loginUser').focus();
   }
 
   async function showApp() {
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
-    $('#userName').textContent = state.config.user || '';
-    $('#adminLink').classList.toggle('hidden', !state.config.isAdmin);
+    const c = state.config;
+    $('#userName').textContent = c.user || '';
+    $('#roleBadge').textContent = ROLE_LABELS[c.role] || '';
+    document.body.classList.toggle('readonly', !c.canEdit);
+    $('#adminNav').classList.toggle('hidden', !c.isSuperAdmin);
+    if (state.view === 'users' && !c.isSuperAdmin) state.view = 'active';
+    $('#areaSel').classList.toggle('hidden', !c.isSuperAdmin);
+    $('#areaBadge').classList.toggle('hidden', c.isSuperAdmin);
+    if (c.isSuperAdmin) {
+      $('#areaSel').innerHTML = '<option value="all">Todas las áreas</option><option value="general">General</option>' +
+        c.areas.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+      $('#areaSel').value = c.areaView;
+    } else {
+      $('#areaBadge').textContent = c.area ? c.area.name : 'General';
+    }
     await Promise.all([loadFolders(), loadTemplates()]);
     render();
   }
@@ -66,6 +88,17 @@
       state.config = await fetch('/api/config').then(r => r.json()); showApp(); }
     catch (err) { $('#loginErr').textContent = err.message; }
   });
+  $('#areaSel').addEventListener('change', async e => {
+    await api('/me/area', { method: 'POST', body: { area: e.target.value } });
+    await reloadSession();
+    toast(e.target.value === 'all' ? 'Viendo todas las áreas' : 'Área: ' + e.target.selectedOptions[0].textContent);
+  });
+  // Recarga perfil/área (tras cambiar de área o editar áreas) y vuelve a pintar todo
+  async function reloadSession() {
+    state.config = await fetch('/api/config').then(r => r.json());
+    state.folder = null;
+    await showApp();
+  }
   $('#logoutBtn').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); location.reload(); });
   $('#menuToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
@@ -83,7 +116,7 @@
     $('#folderList').innerHTML = state.folders.map(f => `
       <div class="folder-item ${state.folder === f.id ? 'active' : ''}" data-id="${f.id}">
         <span class="fname">📁 ${esc(f.name)}</span><span class="count">${f.count}</span>
-        <button class="icon-btn tiny" data-fmenu="${f.id}" title="Opciones">⋮</button>
+        <button class="icon-btn tiny needs-edit" data-fmenu="${f.id}" title="Opciones">⋮</button>
       </div>`).join('');
     $$('#folderList .folder-item').forEach(el => el.addEventListener('click', e => {
       if (e.target.closest('[data-fmenu]')) return;
@@ -109,7 +142,12 @@
       state.templates.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   }
 
+  const CRUMBS = { active: ['Códigos QR', 'Activos'], archived: ['Códigos QR', 'Archivados'], stats: ['Códigos QR', 'Estadísticas'],
+    fichas: ['Fichas', 'Fichas PDF'], templates: ['Plantillas', 'Diseños guardados'], users: ['Administración', 'Usuarios y áreas'] };
   function setActiveNav() {
+    const folder = state.folder && state.folders.find(f => f.id === state.folder);
+    const [section, page] = folder ? ['Carpetas', folder.name] : CRUMBS[state.view] || ['', ''];
+    $('#crumb').innerHTML = `${esc(section)} / <b>${esc(page)}</b>`;
     $$('.nav-item').forEach(a => a.classList.toggle('active', !state.folder && a.dataset.view === state.view));
     $$('.folder-item').forEach(el => el.classList.toggle('active', el.dataset.id === state.folder));
   }
@@ -119,6 +157,7 @@
     if (state.view === 'stats') return renderStats();
     if (state.view === 'templates') return renderTemplates();
     if (state.view === 'fichas') return window.PYFichas.renderList();
+    if (state.view === 'users') return window.PYUsers.render();
     return renderList();
   }
 
@@ -146,7 +185,7 @@
           <option value="created">Más recientes</option><option value="updated">Últimos editados</option>
           <option value="name">Nombre (A-Z)</option><option value="scans">Más escaneados</option>
         </select>
-        <button class="btn primary" id="createBtn2">＋ Crear código QR</button>
+        <button class="btn primary needs-edit" id="createBtn2">＋ Crear código QR</button>
       </div>
       <div class="grid" id="grid">${list.length ? '' : `<div class="empty">${archived ? 'No hay códigos archivados.' : 'Aún no hay códigos QR. Crea el primero con “Crear código QR”.'}</div>`}</div>`;
     $('#sortSel').value = state.sort;
@@ -160,23 +199,24 @@
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
-        <div class="card-left">
+        <div class="card-qr">
+          <button class="scan-badge" data-act="stats" title="Ver escaneos">${q.scans || 0} escaneos</button>
           <div class="thumb"><img alt="QR ${esc(q.name)}"></div>
-          <button class="btn outline-blue small block" data-act="stats">📈 ${q.scans || 0} escaneos</button>
-          <button class="btn primary small block" data-act="download">⬇ Descargar</button>
         </div>
-        <div class="card-right">
-          <button class="icon-btn kebab" data-act="menu" title="Más opciones">⋮</button>
-          <div class="type">🔗 URL dinámica</div>
-          <h3 class="qname"><span>${esc(q.name)}</span> <button class="icon-btn tiny brand" data-act="rename" title="Renombrar">✎</button></h3>
-          <div class="muted small">Actualizado ${fmtDate(q.updatedAt)}</div>
-          <div class="meta">📁 ${folder ? esc(folder.name) : '<span class="muted">Sin carpeta</span>'}</div>
-          <div class="meta"><a href="${esc(q.shortUrl)}" target="_blank" rel="noopener">🔗 ${esc(q.shortUrl.replace(/^https?:\/\//, ''))}</a>
+        <div class="card-info">
+          <div class="type">URL dinámica</div>
+          <h3 class="qname"><span title="${esc(q.name)}">${esc(q.name)}</span> <button class="icon-btn tiny brand needs-edit" data-act="rename" title="Renombrar">✎</button></h3>
+          <div class="meta"><a class="code" href="${esc(q.shortUrl)}" target="_blank" rel="noopener">${esc(q.shortUrl.replace(/^https?:\/\//, ''))}</a>
             <button class="icon-btn tiny" data-act="copy" title="Copiar URL corta">⧉</button></div>
           <div class="meta dest"><span class="trunc" title="${esc(q.url)}">↗ ${esc(q.url)}</span>
-            <button class="icon-btn tiny brand" data-act="editurl" title="Editar URL de destino">✎</button></div>
-          <div class="meta link" data-act="content">✎ Editar contenido</div>
-          <div class="meta link" data-act="design">🎨 Editar diseño</div>
+            <button class="icon-btn tiny brand needs-edit" data-act="editurl" title="Editar URL de destino">✎</button></div>
+          <div class="muted small card-date">📁 ${folder ? esc(folder.name) : 'Sin carpeta'} · ${fmtDate(q.updatedAt)}</div>
+        </div>
+        <div class="card-row">
+          <button data-act="download">⬇ Descargar</button>
+          <button class="needs-edit" data-act="content">Editar</button>
+          <button class="needs-edit" data-act="design">Diseño</button>
+          <button class="needs-edit" data-act="menu" title="Más opciones" aria-label="Más opciones">⋯</button>
         </div>`;
       grid.appendChild(card);
       buildSvg(q.shortUrl, q.design).then(svg => { $('.thumb img', card).src = svgToDataUrl(svg); }).catch(() => {});
@@ -273,7 +313,7 @@
       const el = document.createElement('div');
       el.className = 'tcard';
       el.innerHTML = `<img alt=""><div class="tname">${esc(t.name)}</div>
-        <div class="row"><button class="btn small primary" data-use>Usar</button><button class="btn small danger-text" data-del>Eliminar</button></div>`;
+        <div class="row"><button class="btn small primary needs-edit" data-use>Usar</button><button class="btn small danger-text needs-edit" data-del>Eliminar</button></div>`;
       $('#tgrid').appendChild(el);
       buildSvg(state.config.baseUrl + '/r/ejemplo', t.design).then(svg => { $('img', el).src = svgToDataUrl(svg); });
       $('[data-use]', el).addEventListener('click', () => openEditor(null, 'content', t.design));
@@ -495,7 +535,7 @@
   }
 
   // Compartido con fichas.js
-  window.PYQR = { state, api, toast, esc, fmtDate, openDialog, promptDialog, confirmDialog, showMenu };
+  window.PYQR = { state, api, toast, esc, fmtDate, openDialog, promptDialog, confirmDialog, showMenu, reloadSession, ROLE_LABELS };
 
   init();
 })();

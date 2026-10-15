@@ -58,6 +58,17 @@ docker run -d --name py-qr -p 8000:8000 \
 docker exec -it py-qr python manage.py createsuperuser
 ```
 
+## Inicio de sesión con Microsoft (Entra ID)
+
+1. En https://entra.microsoft.com → **Registros de aplicaciones** → tu app → **Autenticación** → agrega la plataforma **Web** con la URI de redirección
+   `https://tu-dominio/auth/microsoft/callback` (debe coincidir con `PUBLIC_BASE_URL` o con `MS_REDIRECT_URI`).
+   Puede ser `http://` en la red local (ej. `http://192.168.4.10:7700/auth/microsoft/callback`); en producción se recomienda HTTPS.
+2. En **Certificados y secretos** crea un secreto de cliente y copia su **Valor**.
+3. Completa en el `.env`: `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT_ID` (y opcionalmente `MS_ALLOWED_DOMAINS`, `MS_AUTO_CREATE_USERS`, `LOCAL_LOGIN_ENABLED`).
+4. `pip install -r requirements.txt` y reinicia la app. En el login aparecerá **Ingresar con Microsoft**.
+
+El usuario se asocia por correo con un usuario existente de Django; si no existe y `MS_AUTO_CREATE_USERS=true`, se crea sin permisos de administrador (dale "Es staff" desde **Usuarios** si debe administrar).
+
 ## Importante: el dominio
 
 Define `PUBLIC_BASE_URL` con el dominio definitivo (ej. `https://qr.py.cl`) **antes de imprimir QR**. Ese dominio queda grabado dentro de cada QR; si cambia después, los QR impresos dejan de funcionar.

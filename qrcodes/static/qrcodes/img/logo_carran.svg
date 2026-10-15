@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="196" height="52" viewBox="0 0 196 52" role="img" aria-label="Constructora Carrán">
+  <!-- Isotipo: dos cumbres en línea -->
+  <g fill="none" stroke-linejoin="miter" stroke-linecap="square">
+    <path d="M3 47 L17 26 L27 41" stroke="#c19253" stroke-width="2.2"/>
+    <path d="M14 47 L35 8 L57 47 Z" stroke="#c19253" stroke-width="2.2"/>
+    <path d="M24 47 L35 27 L46 47" stroke="#424242" stroke-width="1.6"/>
+  </g>
+  <text x="64" y="20" fill="#6b6b6b" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="6.6" font-weight="600" letter-spacing="1.6">CONSTRUCTORA</text>
+  <text x="62" y="46" fill="#424242" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="27" font-weight="800" letter-spacing="0.5">CARRÁN</text>
+</svg>
