@@ -68,7 +68,7 @@
         <select id="fFolder" aria-label="Carpeta">${folderOpts}</select>
         <div class="spacer"></div>
         <input type="file" id="fUpload" accept="application/pdf,.pdf" multiple hidden>
-        <button class="btn primary" id="fUploadBtn">⤒ Subir PDF</button>
+        <button class="btn primary needs-edit" id="fUploadBtn">⤒ Subir PDF</button>
       </div>
       <div class="drop-zone" id="fDrop">Arrastra aquí uno o más archivos PDF para subirlos${listState.folder ? ' a esta carpeta' : ''}</div>
       <div class="flist" id="fList">${list.length ? '' : '<div class="empty">Aún no hay fichas. Sube el primer PDF con “Subir PDF”.</div>'}</div>`;
@@ -99,7 +99,7 @@
         <div class="factions">
           <button class="btn primary small" data-act="open">Posicionar QR</button>
           <button class="btn outline small" data-act="download">⬇ PDF con QR</button>
-          <button class="icon-btn" data-act="menu" title="Más opciones">⋮</button>
+          <button class="icon-btn needs-edit" data-act="menu" title="Más opciones">⋮</button>
         </div>`;
       card.addEventListener('click', e => onCardAction(e, f));
       box.appendChild(card);

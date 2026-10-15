@@ -12,8 +12,40 @@ def generate_code(length=6):
             return code
 
 
+class Area(models.Model):
+    """Ambiente separado (ej. Recursos Humanos): sus usuarios solo ven los QR, carpetas, fichas y plantillas del área."""
+    name = models.CharField("nombre", max_length=120, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "área"
+        verbose_name_plural = "áreas"
+
+    def __str__(self):
+        return self.name
+
+
+class Profile(models.Model):
+    SUPERADMIN, ADMIN, VIEWER = "superadmin", "admin", "viewer"
+    ROLES = [(SUPERADMIN, "Super administrador"), (ADMIN, "Administrador"), (VIEWER, "Visualización")]
+
+    user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="profile")
+    role = models.CharField("perfil", max_length=20, choices=ROLES, default=VIEWER)
+    # Sin área = área "General" (los QR creados antes de existir las áreas)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="profiles", verbose_name="área")
+
+    class Meta:
+        verbose_name = "perfil"
+        verbose_name_plural = "perfiles"
+
+    def __str__(self):
+        return f"{self.user} · {self.get_role_display()}"
+
+
 class Folder(models.Model):
     name = models.CharField("nombre", max_length=120)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="folders", verbose_name="área")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -28,6 +60,7 @@ class QRCode(models.Model):
     code = models.CharField("código corto", max_length=40, unique=True)
     name = models.CharField("nombre", max_length=200)
     url = models.URLField("URL de destino", max_length=2000)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="qrs", verbose_name="área")
     folder = models.ForeignKey(Folder, null=True, blank=True, on_delete=models.SET_NULL, related_name="qrs", verbose_name="carpeta")
     design = models.JSONField("diseño", default=dict, blank=True)
     archived = models.BooleanField("archivado", default=False)
@@ -67,6 +100,7 @@ class Ficha(models.Model):
     file = models.FileField("archivo PDF", upload_to=ficha_upload_to)
     original_name = models.CharField("nombre original", max_length=255, blank=True)
     size = models.PositiveIntegerField("tamaño (bytes)", default=0)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="fichas", verbose_name="área")
     folder = models.ForeignKey(Folder, null=True, blank=True, on_delete=models.SET_NULL, related_name="fichas", verbose_name="carpeta")
     # Lista de {"qrId", "page", "x", "y", "w"}: x, y y w son fracciones (0-1) del ancho/alto visible de la página
     placements = models.JSONField("QR posicionados", default=list, blank=True)
@@ -86,6 +120,7 @@ class Ficha(models.Model):
 class DesignTemplate(models.Model):
     name = models.CharField("nombre", max_length=120)
     design = models.JSONField("diseño", default=dict)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="templates", verbose_name="área")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

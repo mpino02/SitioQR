@@ -2,4 +2,5 @@ Django>=5.0,<5.3
 whitenoise>=6.6
 gunicorn>=22.0 ; sys_platform != "win32"
 waitress>=3.0
+msal>=1.28
 # psycopg[binary]>=3.1   # descomentar si usas PostgreSQL

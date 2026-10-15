@@ -123,6 +123,16 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # logos en base64 dentro del diseño
 
+# Inicio de sesión con Microsoft (Entra ID). Se activa al definir MS_CLIENT_ID, MS_CLIENT_SECRET y MS_TENANT_ID.
+MS_CLIENT_ID = os.environ.get("MS_CLIENT_ID", "")
+MS_CLIENT_SECRET = os.environ.get("MS_CLIENT_SECRET", "")
+MS_TENANT_ID = os.environ.get("MS_TENANT_ID", "")
+MS_REDIRECT_URI = os.environ.get("MS_REDIRECT_URI", f"{PUBLIC_BASE_URL}/auth/microsoft/callback")
+MS_ALLOWED_DOMAINS = [d.lower() for d in env_list("MS_ALLOWED_DOMAINS")]
+MS_AUTO_CREATE_USERS = env_bool("MS_AUTO_CREATE_USERS", True)
+# Permite seguir entrando con usuario y contraseña de Django además de Microsoft
+LOCAL_LOGIN_ENABLED = env_bool("LOCAL_LOGIN_ENABLED", True)
+
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 if PUBLIC_BASE_URL.startswith("https") and not DEBUG:
     SESSION_COOKIE_SECURE = True

@@ -2,13 +2,13 @@ from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import DesignTemplate, Ficha, Folder, QRCode, ScanStat
+from .models import Area, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat
 
 
 @admin.register(QRCode)
 class QRCodeAdmin(admin.ModelAdmin):
     list_display = ("name", "short_link", "url", "folder", "scans", "archived", "updated_at")
-    list_filter = ("archived", "folder")
+    list_filter = ("archived", "area", "folder")
     search_fields = ("name", "code", "url")
     readonly_fields = ("scans", "last_scan_at", "created_by", "created_at", "updated_at")
 
@@ -40,3 +40,16 @@ class FichaAdmin(admin.ModelAdmin):
 class ScanStatAdmin(admin.ModelAdmin):
     list_display = ("qr", "day", "device", "count")
     list_filter = ("device", "day")
+
+
+@admin.register(Area)
+class AreaAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_at")
+    search_fields = ("name",)
+
+
+@admin.register(Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "role", "area")
+    list_filter = ("role", "area")
+    search_fields = ("user__username", "user__email")
