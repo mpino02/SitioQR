@@ -47,6 +47,28 @@ qr.py.cl {
 
 Con Nginx, recuerda enviar `proxy_set_header X-Forwarded-Proto $scheme;` y `proxy_set_header Host $host;`.
 
+## Azure App Service (Linux, Python 3.13)
+
+El mismo `requirements.txt` sirve para local (Windows usa waitress) y Azure (Linux usa gunicorn).
+
+1. **Configuración > Variables de entorno**: las mismas del `.env` (nunca se sube el `.env`), más:
+   - `PUBLIC_BASE_URL=https://<tu-app>.azurewebsites.net` (o el dominio definitivo antes de imprimir QR)
+   - `DATA_DIR=/home/data` (carpeta persistente: ahí quedan los PDF de fichas)
+   - `SCM_DO_BUILD_DURING_DEPLOYMENT=true` (Azure instala `requirements.txt` al desplegar)
+   - `DEBUG=false` y un `DJANGO_SECRET_KEY` nuevo
+2. **Configuración > Configuración general > Comando de inicio**: `bash startup.sh`
+   (aplica las migraciones y arranca gunicorn).
+3. **Entra ID**: agregar la URI `https://<tu-app>.azurewebsites.net/auth/microsoft/callback` (plataforma Web).
+4. **PostgreSQL**: el firewall debe permitir servicios de Azure.
+5. Desplegar el código, por ejemplo desde esta carpeta:
+
+```bash
+git archive --format=zip -o deploy.zip HEAD
+az webapp deploy -g <grupo> -n <tu-app> --src-path deploy.zip --type zip
+```
+
+Los errores se ven en **Supervisión > Secuencia de registro**.
+
 ## Con Docker
 
 ```bash
@@ -76,7 +98,31 @@ Define `PUBLIC_BASE_URL` con el dominio definitivo (ej. `https://qr.py.cl`) **an
 ## Base de datos y respaldo
 
 Por defecto usa SQLite en `data/db.sqlite3`: basta con respaldar ese archivo.
-Para PostgreSQL, instala `psycopg[binary]` y define `DB_ENGINE=postgresql` y las variables `DB_*` del `.env`.
+Para PostgreSQL define en el `.env` `DATABASE_URL` (o `DB_ENGINE=postgresql` y las variables `DB_*`) y `DB_SSLMODE=require` si la base está en la nube.
+Los PDF de las fichas no van en la base: siguen en `DATA_DIR/media` y hay que respaldarlos aparte.
+
+### Pasar de SQLite a PostgreSQL (conservando los datos)
+
+En el servidor donde corre la app, con el código actualizado:
+
+```bash
+pip install -r requirements.txt
+# 1. Respaldo del SQLite actual
+copy data\db.sqlite3 data\db.sqlite3.respaldo          # Linux: cp data/db.sqlite3 data/db.sqlite3.respaldo
+# 2. Aplicar las migraciones pendientes AÚN EN SQLITE (crea los perfiles de los usuarios existentes)
+python manage.py migrate
+# 3. Exportar los datos
+python -X utf8 manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission -e admin.logentry -e sessions --indent 2 -o respaldo.json
+# 4. Editar el .env: agregar DATABASE_URL (o DB_*) y DB_SSLMODE=require
+# 5. Probar la conexión y crear las tablas en PostgreSQL (la base debe estar vacía)
+python manage.py migrate
+# 6. Importar los datos
+python -X utf8 manage.py loaddata respaldo.json
+# 7. Reiniciar la app
+```
+
+Si algo falla, basta con quitar `DATABASE_URL`/`DB_ENGINE` del `.env` para volver al SQLite, que queda intacto.
+El firewall de la base en la nube debe permitir la IP pública del servidor.
 
 ## Pruebas
 

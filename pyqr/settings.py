@@ -4,6 +4,7 @@ Todas las opciones importantes se leen de variables de entorno o del archivo .en
 """
 import os
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -37,6 +38,9 @@ APP_NAME = os.environ.get("APP_NAME", "PY QR")
 
 _public_host = PUBLIC_BASE_URL.split("://", 1)[-1].split("/")[0].split(":")[0]
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", f"{_public_host},localhost,127.0.0.1")
+# Azure App Service define WEBSITE_HOSTNAME (dominio *.azurewebsites.net): se acepta siempre
+if os.environ.get("WEBSITE_HOSTNAME") and os.environ["WEBSITE_HOSTNAME"] not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(os.environ["WEBSITE_HOSTNAME"])
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", PUBLIC_BASE_URL if PUBLIC_BASE_URL.startswith("https") else "")
 
 INSTALLED_APPS = [
@@ -79,21 +83,40 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "pyqr.wsgi.application"
 
-# Base de datos: SQLite por defecto. Para PostgreSQL define DB_ENGINE=postgresql y las variables DB_*.
-if os.environ.get("DB_ENGINE", "sqlite") == "postgresql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("DB_NAME", "pyqr"),
-            "USER": os.environ.get("DB_USER", "pyqr"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-            "HOST": os.environ.get("DB_HOST", "localhost"),
-            "PORT": os.environ.get("DB_PORT", "5432"),
-        }
+# Base de datos: SQLite por defecto. Para PostgreSQL define DATABASE_URL (cadena de conexión del proveedor)
+# o DB_ENGINE=postgresql y las variables DB_*.
+def _postgres_from_env():
+    db = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "pyqr"),
+        "USER": os.environ.get("DB_USER", "pyqr"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "OPTIONS": {},
     }
+    url = os.environ.get("DATABASE_URL", "")
+    if url:  # postgresql://usuario:clave@host:5432/base?sslmode=require
+        u = urlsplit(url)
+        db.update(NAME=unquote(u.path.lstrip("/")), USER=unquote(u.username or ""), PASSWORD=unquote(u.password or ""),
+                  HOST=u.hostname or "", PORT=str(u.port or 5432))
+        db["OPTIONS"].update(dict(parse_qsl(u.query)))
+    # Las bases en la nube suelen exigir SSL: require (o verify-full con DB_SSLROOTCERT)
+    if os.environ.get("DB_SSLMODE"):
+        db["OPTIONS"]["sslmode"] = os.environ["DB_SSLMODE"]
+    if os.environ.get("DB_SSLROOTCERT"):
+        db["OPTIONS"]["sslrootcert"] = os.environ["DB_SSLROOTCERT"]
+    db["OPTIONS"].setdefault("connect_timeout", 10)
+    db["CONN_MAX_AGE"] = int(os.environ.get("DB_CONN_MAX_AGE", "60"))
+    db["CONN_HEALTH_CHECKS"] = True
+    return db
+
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-if os.environ.get("DB_ENGINE", "sqlite") != "postgresql":
+if os.environ.get("DATABASE_URL") or os.environ.get("DB_ENGINE", "sqlite") == "postgresql":
+    DATABASES = {"default": _postgres_from_env()}
+else:
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / "db.sqlite3"}}
 
 # PDF subidos (fichas). Se sirven solo a usuarios autenticados mediante la API, no como archivos públicos.
@@ -138,3 +161,11 @@ if PUBLIC_BASE_URL.startswith("https") and not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Errores a la consola: en Azure se ven en "Secuencia de registro" (Log stream)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "WARNING")},
+}
