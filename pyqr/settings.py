@@ -4,6 +4,7 @@ Todas las opciones importantes se leen de variables de entorno o del archivo .en
 """
 import os
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -79,21 +80,40 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "pyqr.wsgi.application"
 
-# Base de datos: SQLite por defecto. Para PostgreSQL define DB_ENGINE=postgresql y las variables DB_*.
-if os.environ.get("DB_ENGINE", "sqlite") == "postgresql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("DB_NAME", "pyqr"),
-            "USER": os.environ.get("DB_USER", "pyqr"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-            "HOST": os.environ.get("DB_HOST", "localhost"),
-            "PORT": os.environ.get("DB_PORT", "5432"),
-        }
+# Base de datos: SQLite por defecto. Para PostgreSQL define DATABASE_URL (cadena de conexión del proveedor)
+# o DB_ENGINE=postgresql y las variables DB_*.
+def _postgres_from_env():
+    db = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "pyqr"),
+        "USER": os.environ.get("DB_USER", "pyqr"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "OPTIONS": {},
     }
+    url = os.environ.get("DATABASE_URL", "")
+    if url:  # postgresql://usuario:clave@host:5432/base?sslmode=require
+        u = urlsplit(url)
+        db.update(NAME=unquote(u.path.lstrip("/")), USER=unquote(u.username or ""), PASSWORD=unquote(u.password or ""),
+                  HOST=u.hostname or "", PORT=str(u.port or 5432))
+        db["OPTIONS"].update(dict(parse_qsl(u.query)))
+    # Las bases en la nube suelen exigir SSL: require (o verify-full con DB_SSLROOTCERT)
+    if os.environ.get("DB_SSLMODE"):
+        db["OPTIONS"]["sslmode"] = os.environ["DB_SSLMODE"]
+    if os.environ.get("DB_SSLROOTCERT"):
+        db["OPTIONS"]["sslrootcert"] = os.environ["DB_SSLROOTCERT"]
+    db["OPTIONS"].setdefault("connect_timeout", 10)
+    db["CONN_MAX_AGE"] = int(os.environ.get("DB_CONN_MAX_AGE", "60"))
+    db["CONN_HEALTH_CHECKS"] = True
+    return db
+
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-if os.environ.get("DB_ENGINE", "sqlite") != "postgresql":
+if os.environ.get("DATABASE_URL") or os.environ.get("DB_ENGINE", "sqlite") == "postgresql":
+    DATABASES = {"default": _postgres_from_env()}
+else:
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / "db.sqlite3"}}
 
 # PDF subidos (fichas). Se sirven solo a usuarios autenticados mediante la API, no como archivos públicos.
