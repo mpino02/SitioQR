@@ -38,6 +38,9 @@ APP_NAME = os.environ.get("APP_NAME", "PY QR")
 
 _public_host = PUBLIC_BASE_URL.split("://", 1)[-1].split("/")[0].split(":")[0]
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", f"{_public_host},localhost,127.0.0.1")
+# Azure App Service define WEBSITE_HOSTNAME (dominio *.azurewebsites.net): se acepta siempre
+if os.environ.get("WEBSITE_HOSTNAME") and os.environ["WEBSITE_HOSTNAME"] not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(os.environ["WEBSITE_HOSTNAME"])
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", PUBLIC_BASE_URL if PUBLIC_BASE_URL.startswith("https") else "")
 
 INSTALLED_APPS = [
@@ -158,3 +161,11 @@ if PUBLIC_BASE_URL.startswith("https") and not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Errores a la consola: en Azure se ven en "Secuencia de registro" (Log stream)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "WARNING")},
+}

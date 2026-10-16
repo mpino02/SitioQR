@@ -47,6 +47,28 @@ qr.py.cl {
 
 Con Nginx, recuerda enviar `proxy_set_header X-Forwarded-Proto $scheme;` y `proxy_set_header Host $host;`.
 
+## Azure App Service (Linux, Python 3.13)
+
+El mismo `requirements.txt` sirve para local (Windows usa waitress) y Azure (Linux usa gunicorn).
+
+1. **Configuración > Variables de entorno**: las mismas del `.env` (nunca se sube el `.env`), más:
+   - `PUBLIC_BASE_URL=https://<tu-app>.azurewebsites.net` (o el dominio definitivo antes de imprimir QR)
+   - `DATA_DIR=/home/data` (carpeta persistente: ahí quedan los PDF de fichas)
+   - `SCM_DO_BUILD_DURING_DEPLOYMENT=true` (Azure instala `requirements.txt` al desplegar)
+   - `DEBUG=false` y un `DJANGO_SECRET_KEY` nuevo
+2. **Configuración > Configuración general > Comando de inicio**: `bash startup.sh`
+   (aplica las migraciones y arranca gunicorn).
+3. **Entra ID**: agregar la URI `https://<tu-app>.azurewebsites.net/auth/microsoft/callback` (plataforma Web).
+4. **PostgreSQL**: el firewall debe permitir servicios de Azure.
+5. Desplegar el código, por ejemplo desde esta carpeta:
+
+```bash
+git archive --format=zip -o deploy.zip HEAD
+az webapp deploy -g <grupo> -n <tu-app> --src-path deploy.zip --type zip
+```
+
+Los errores se ven en **Supervisión > Secuencia de registro**.
+
 ## Con Docker
 
 ```bash
