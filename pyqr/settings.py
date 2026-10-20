@@ -154,6 +154,8 @@ MS_TENANT_ID = os.environ.get("MS_TENANT_ID", "")
 MS_REDIRECT_URI = os.environ.get("MS_REDIRECT_URI", f"{PUBLIC_BASE_URL}/auth/microsoft/callback")
 MS_ALLOWED_DOMAINS = [d.lower() for d in env_list("MS_ALLOWED_DOMAINS")]
 MS_AUTO_CREATE_USERS = env_bool("MS_AUTO_CREATE_USERS", True)
+# Perfil de los usuarios nuevos: "pending" (sin acceso hasta que un super admin lo asigne) o "viewer"
+NEW_USER_ROLE = os.environ.get("NEW_USER_ROLE", "pending") if os.environ.get("NEW_USER_ROLE", "pending") in ("pending", "viewer") else "pending"
 # Permite seguir entrando con usuario y contraseña de Django además de Microsoft
 LOCAL_LOGIN_ENABLED = env_bool("LOCAL_LOGIN_ENABLED", True)
 # /admin/ solo con sesión iniciada por Microsoft (si Microsoft está configurado)

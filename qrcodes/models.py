@@ -27,11 +27,13 @@ class Area(models.Model):
 
 
 class Profile(models.Model):
-    SUPERADMIN, ADMIN, VIEWER = "superadmin", "admin", "viewer"
-    ROLES = [(SUPERADMIN, "Super administrador"), (ADMIN, "Administrador"), (VIEWER, "Visualización")]
+    SUPERADMIN, ADMIN, VIEWER, PENDING = "superadmin", "admin", "viewer", "pending"
+    ROLES = [(SUPERADMIN, "Super administrador"), (ADMIN, "Administrador"), (VIEWER, "Visualización"),
+             (PENDING, "Sin acceso (pendiente)")]
 
     user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="profile")
-    role = models.CharField("perfil", max_length=20, choices=ROLES, default=VIEWER)
+    # Los usuarios nuevos quedan sin acceso hasta que un super administrador les asigne perfil
+    role = models.CharField("perfil", max_length=20, choices=ROLES, default=PENDING)
     # Sin área = área "General" (los QR creados antes de existir las áreas)
     area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.PROTECT, related_name="profiles", verbose_name="área")
 
@@ -130,3 +132,25 @@ class DesignTemplate(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AuditLog(models.Model):
+    """Historial de cambios: quién hizo qué y cuándo. Solo se agregan registros; nunca se editan."""
+    at = models.DateTimeField("fecha", auto_now_add=True, db_index=True)
+    user = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, verbose_name="usuario")
+    username = models.CharField("usuario (texto)", max_length=150, blank=True)  # se conserva aunque se borre el usuario
+    ip = models.CharField("IP", max_length=64, blank=True)
+    action = models.CharField("acción", max_length=20)  # crear, editar, eliminar, duplicar
+    object_type = models.CharField("tipo", max_length=20, db_index=True)  # qr, carpeta, ficha, plantilla, usuario, area
+    object_id = models.CharField("id", max_length=40, blank=True, db_index=True)
+    object_name = models.CharField("nombre", max_length=255, blank=True)
+    area = models.ForeignKey(Area, null=True, blank=True, on_delete=models.SET_NULL, related_name="+", verbose_name="área")
+    changes = models.JSONField("cambios", default=dict, blank=True)  # {"campo": [antes, después]}
+
+    class Meta:
+        ordering = ["-at", "-id"]
+        verbose_name = "registro de cambios"
+        verbose_name_plural = "historial de cambios"
+
+    def __str__(self):
+        return f"{self.at:%Y-%m-%d %H:%M} {self.username} {self.action} {self.object_type} {self.object_name}"

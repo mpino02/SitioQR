@@ -5,7 +5,7 @@ import tempfile
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 
 from .models import Area, Ficha, Profile, QRCode, ScanStat
 
@@ -324,3 +324,62 @@ class SecurityHeadersTests(TestCase):
         from django.conf import settings
         self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
         self.assertLessEqual(settings.SESSION_COOKIE_AGE, 24 * 3600)
+
+
+@override_settings(MS_CLIENT_ID="cid", MS_CLIENT_SECRET="secret", MS_TENANT_ID="tid", MS_ALLOWED_DOMAINS=["py.cl"],
+                   MS_AUTO_CREATE_USERS=True, NEW_USER_ROLE="pending")
+class PendingAndAuditTests(TestCase):
+    def setUp(self):
+        self.rrhh = Area.objects.create(name="RRHH")
+        self.boss = User.objects.create_superuser("boss", password="x")
+        self.hr_admin = User.objects.create_user("hr", password="x")
+        Profile.objects.create(user=self.hr_admin, role=Profile.ADMIN, area=self.rrhh)
+        self.gen_viewer = User.objects.create_user("gv", password="x")
+        Profile.objects.create(user=self.gen_viewer, role=Profile.VIEWER)
+
+    def _json(self, method, url, data=None):
+        return getattr(self.client, method)(url, json.dumps(data or {}), content_type="application/json")
+
+    def test_new_microsoft_user_is_pending_and_blocked(self):
+        from unittest import mock
+        s = self.client.session
+        s["ms_auth_flow"] = {"state": "s"}
+        s.save()
+        with mock.patch("qrcodes.microsoft_auth._app") as app:
+            app.return_value.acquire_token_by_auth_code_flow.return_value = {"id_token_claims": {"preferred_username": "nuevo@py.cl"}}
+            self.client.get("/auth/microsoft/callback?code=x&state=s")
+        cfg = self.client.get("/api/config").json()
+        self.assertEqual((cfg["authenticated"], cfg["role"], cfg["canEdit"]), (True, "pending", False))
+        self.assertEqual(self.client.get("/api/qrs").status_code, 403)
+        self.assertEqual(self.client.get("/api/folders").status_code, 403)
+        # el super admin le asigna perfil y queda con acceso
+        nuevo = User.objects.get(username="nuevo@py.cl")
+        boss = Client()
+        boss.force_login(self.boss)
+        boss.put(f"/api/users/{nuevo.id}", json.dumps({"role": "viewer"}), content_type="application/json")
+        self.assertEqual(self.client.get("/api/qrs").status_code, 200)
+
+    def test_qr_changes_are_recorded(self):
+        from .models import AuditLog
+        self.client.force_login(self.hr_admin)
+        qid = self._json("post", "/api/qrs", {"name": "Volante", "url": "https://a.cl", "code": "vol"}).json()["id"]
+        self._json("put", f"/api/qrs/{qid}", {"url": "https://b.cl"})
+        self._json("put", f"/api/qrs/{qid}", {"url": "https://b.cl"})  # sin cambios: no registra
+        hist = self.client.get(f"/api/audit?qr={qid}").json()
+        self.assertEqual([h["action"] for h in hist], ["editar", "crear"])
+        self.assertEqual(hist[0]["changes"]["url"], ["https://a.cl", "https://b.cl"])
+        self.assertEqual((hist[0]["user"], hist[0]["area"]), ("hr", "RRHH"))
+        self.assertNotIn("ip", hist[0])  # la IP solo la ve el super admin
+        self._json("delete", f"/api/qrs/{qid}")
+        self.assertTrue(AuditLog.objects.filter(action="eliminar", object_type="qr", object_name="Volante").exists())
+
+    def test_history_respects_areas_and_roles(self):
+        q = QRCode.objects.create(code="hr1", name="RRHH", url="https://a.cl", area=self.rrhh)
+        self.client.force_login(self.gen_viewer)
+        self.assertEqual(self.client.get(f"/api/audit?qr={q.id}").status_code, 404)  # QR de otra área
+        self.assertEqual(self.client.get("/api/audit").status_code, 403)  # historial completo: solo super admin
+        self.client.force_login(self.boss)
+        self._json("put", f"/api/users/{self.gen_viewer.id}", {"role": "admin", "areaId": str(self.rrhh.id)})
+        full = self.client.get("/api/audit?type=usuario").json()
+        self.assertEqual(full[0]["changes"], {"perfil": ["viewer", "admin"], "área": ["General", "RRHH"]})
+        self.assertIn("ip", full[0])
