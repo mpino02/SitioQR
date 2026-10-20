@@ -250,3 +250,65 @@ class RolesAndAreasTests(TestCase):
         self.assertEqual(self._post("/api/areas", {"name": "ventas"}).status_code, 409)
         self.assertEqual(self.client.delete(f"/api/areas/{self.rrhh.id}").status_code, 409)  # tiene usuarios y QR
         self.assertEqual(self.client.delete(f"/api/areas/{r.json()['id']}").status_code, 200)
+
+
+@override_settings(MS_CLIENT_ID="cid", MS_CLIENT_SECRET="secret", MS_TENANT_ID="tid", ADMIN_REQUIRE_MICROSOFT=True,
+                   MS_ALLOWED_DOMAINS=["py.cl"], MS_AUTO_CREATE_USERS=True)
+class AdminAndRateLimitTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.boss = User.objects.create_superuser("boss", email="boss@py.cl", password="clave-segura-123")
+
+    def _ms_login(self, email, next_url=None):
+        from unittest import mock
+        session = self.client.session
+        session["ms_auth_flow"] = {"state": "s"}
+        if next_url:
+            session["ms_auth_next"] = next_url
+        session.save()
+        with mock.patch("qrcodes.microsoft_auth._app") as app:
+            app.return_value.acquire_token_by_auth_code_flow.return_value = {"id_token_claims": {"preferred_username": email}}
+            return self.client.get("/auth/microsoft/callback?code=x&state=s")
+
+    def test_admin_login_redirects_to_microsoft(self):
+        r = self.client.get("/admin/login/?next=/admin/")
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r["Location"].startswith("/auth/microsoft/login?next="))
+
+    def test_password_session_is_not_enough_for_admin(self):
+        self.client.post("/api/login", json.dumps({"username": "boss", "password": "clave-segura-123"}), content_type="application/json")
+        r = self.client.get("/admin/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/admin/login/", r["Location"])
+
+    def test_microsoft_session_opens_admin_and_returns_to_next(self):
+        r = self._ms_login("boss@py.cl", next_url="/admin/")
+        self.assertEqual(r["Location"], "/admin/")
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+
+    def test_microsoft_non_staff_gets_message_not_loop(self):
+        self._ms_login("ana@py.cl")
+        r = self.client.get("/admin/login/?next=/admin/")
+        self.assertIn("login_error", r["Location"])
+
+    def test_external_next_is_ignored(self):
+        from unittest import mock
+        with mock.patch("qrcodes.microsoft_auth._app") as app:
+            app.return_value.initiate_auth_code_flow.return_value = {"auth_uri": "https://login.microsoftonline.com/x", "state": "s"}
+            self.client.get("/auth/microsoft/login?next=https://malo.example.com/")
+        self.assertNotIn("ms_auth_next", self.client.session)
+
+    @override_settings(LOGIN_MAX_FAILURES_USER=3)
+    def test_failed_logins_are_limited(self):
+        bad = json.dumps({"username": "boss", "password": "mala"})
+        for _ in range(3):
+            self.assertEqual(self.client.post("/api/login", bad, content_type="application/json").status_code, 401)
+        r = self.client.post("/api/login", json.dumps({"username": "boss", "password": "clave-segura-123"}), content_type="application/json")
+        self.assertEqual(r.status_code, 429)  # bloqueado aunque ahora la clave sea correcta
+
+    def test_client_ip_handles_azure_port(self):
+        from django.test import RequestFactory
+        from .ratelimit import client_ip
+        req = RequestFactory().get("/", HTTP_X_FORWARDED_FOR="200.68.57.83:51234, 10.0.0.1")
+        self.assertEqual(client_ip(req), "200.68.57.83")

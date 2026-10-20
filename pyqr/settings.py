@@ -155,6 +155,16 @@ MS_ALLOWED_DOMAINS = [d.lower() for d in env_list("MS_ALLOWED_DOMAINS")]
 MS_AUTO_CREATE_USERS = env_bool("MS_AUTO_CREATE_USERS", True)
 # Permite seguir entrando con usuario y contraseña de Django además de Microsoft
 LOCAL_LOGIN_ENABLED = env_bool("LOCAL_LOGIN_ENABLED", True)
+# /admin/ solo con sesión iniciada por Microsoft (si Microsoft está configurado)
+ADMIN_REQUIRE_MICROSOFT = env_bool("ADMIN_REQUIRE_MICROSOFT", True)
+
+# Límite de intentos fallidos de login con contraseña (por usuario y por IP, en una ventana de tiempo)
+LOGIN_MAX_FAILURES_USER = int(os.environ.get("LOGIN_MAX_FAILURES_USER", "5"))
+LOGIN_MAX_FAILURES_IP = int(os.environ.get("LOGIN_MAX_FAILURES_IP", "20"))
+LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW", str(15 * 60)))  # segundos
+
+# Caché en la base de datos: compartido entre procesos e instancias (se crea con "manage.py createcachetable")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "django_cache"}}
 
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 if PUBLIC_BASE_URL.startswith("https") and not DEBUG:

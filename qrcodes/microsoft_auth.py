@@ -9,10 +9,15 @@ from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.models import User
 from django.http import HttpResponseRedirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 SESSION_FLOW_KEY = "ms_auth_flow"
+SESSION_NEXT_KEY = "ms_auth_next"
+# Marca en la sesión que el usuario entró con Microsoft (la exige /admin/)
+SESSION_METHOD_KEY = "auth_method"
+METHOD_MICROSOFT = "microsoft"
 SCOPES = ["User.Read"]
 
 
@@ -70,6 +75,12 @@ def ms_login(request):
     except ValueError:  # MS_TENANT_ID inválido o sin conexión con Microsoft
         return _fail("No se pudo contactar a Microsoft. Revisa MS_TENANT_ID en la configuración")
     request.session[SESSION_FLOW_KEY] = flow
+    # Página a la que volver después de entrar (solo rutas de este mismo sitio)
+    next_url = request.GET.get("next", "")
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        request.session[SESSION_NEXT_KEY] = next_url
+    else:
+        request.session.pop(SESSION_NEXT_KEY, None)
     return HttpResponseRedirect(flow["auth_uri"])
 
 
@@ -91,5 +102,7 @@ def ms_callback(request):
     user, error = _user_from_claims(result.get("id_token_claims") or {})
     if error:
         return _fail(error)
+    next_url = request.session.pop(SESSION_NEXT_KEY, None) or "/"
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return HttpResponseRedirect("/")
+    request.session[SESSION_METHOD_KEY] = METHOD_MICROSOFT
+    return HttpResponseRedirect(next_url)

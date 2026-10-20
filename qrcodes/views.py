@@ -16,7 +16,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import access, microsoft_auth
+from . import access, microsoft_auth, ratelimit
 from .access import scope
 from .models import Area, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat, generate_code
 
@@ -172,9 +172,15 @@ def api_login(request):
     if not settings.LOCAL_LOGIN_ENABLED:
         return err("Ingresa con tu cuenta de Microsoft", 403)
     data = body(request)
-    user = authenticate(request, username=data.get("username", ""), password=data.get("password", ""))
+    username = str(data.get("username") or "")
+    if ratelimit.is_blocked(request, username):
+        minutes = max(1, settings.LOGIN_FAILURE_WINDOW // 60)
+        return err(f"Demasiados intentos fallidos. Espera {minutes} minutos o entra con Microsoft.", 429)
+    user = authenticate(request, username=username, password=str(data.get("password") or ""))
     if not user:
+        ratelimit.register_failure(request, username)
         return err("Usuario o contraseña incorrectos", 401)
+    ratelimit.reset(request, username)
     login(request, user)
     return JsonResponse({"ok": True})
 
