@@ -166,12 +166,17 @@
 
   async function render() {
     setActiveNav();
-    if (state.view === 'stats') return renderStats();
-    if (state.view === 'templates') return renderTemplates();
-    if (state.view === 'fichas') return window.PYFichas.renderList();
-    if (state.view === 'users') return window.PYUsers.render();
-    if (state.view === 'audit') return window.PYAudit.render();
-    return renderList();
+    try {
+      if (state.view === 'stats') return await renderStats();
+      if (state.view === 'templates') return await renderTemplates();
+      if (state.view === 'fichas') return await window.PYFichas.renderList();
+      if (state.view === 'users') return await window.PYUsers.render();
+      if (state.view === 'audit') return await window.PYAudit.render();
+      return await renderList();
+    } catch (err) {
+      // Sin esto, un error del servidor dejaba la sección sin cambiar y sin aviso
+      toast('No se pudo cargar esta sección: ' + err.message, true);
+    }
   }
 
   // ---------- Lista de QR ----------
