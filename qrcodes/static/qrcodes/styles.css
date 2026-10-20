@@ -361,3 +361,28 @@ h2, h3, .qname, .modal-head h2, .modal-head h3, .tab { font-family: var(--font-h
   .main { margin-left: 0; }
   h1 { font-size: 30px; }
 }
+
+/* Usuarios sin acceso (pendientes) */
+.pending .sidebar > :not(.side-brand) { display: none; }
+.pending-box { max-width: 560px; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--brand); padding: 24px 28px; }
+.pending-box h1 { font-size: 26px; margin-bottom: 10px; }
+.pending-tag { font: 600 10.5px var(--font-head); letter-spacing: .08em; text-transform: uppercase; background: var(--brand); color: #1f1c18; padding: 2px 7px; vertical-align: middle; }
+.urow.is-pending { border-left: 3px solid var(--brand); }
+
+/* Historial de cambios */
+.au-list { display: flex; flex-direction: column; border: 1px solid var(--line); background: #fff; }
+.au-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 170px; gap: 14px; padding: 11px 14px; border-bottom: 1px solid #ebe6dc; font-size: 13.5px; }
+.au-row:last-child { border-bottom: 0; }
+.au-when { color: var(--muted); font: 12px var(--font-mono); }
+.au-who { text-align: right; overflow-wrap: anywhere; font-weight: 500; }
+.au-act { font: 600 10.5px var(--font-head); letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; margin-right: 6px; background: var(--tint); color: var(--brand-d); }
+.au-act.au-eliminar { background: #f8e3df; color: var(--danger); }
+.au-act.au-crear, .au-act.au-duplicar { background: #e8efe2; color: #3d5a2a; }
+.au-type { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.au-ch { color: #4b4b4b; font-size: 12.5px; margin-top: 3px; overflow-wrap: anywhere; }
+.au-ch b { font-weight: 600; }
+.dialog-body .au-list { border: 0; }
+@media (max-width: 760px) {
+  .au-row { grid-template-columns: 1fr; gap: 4px; }
+  .au-who { text-align: left; }
+}

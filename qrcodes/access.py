@@ -9,6 +9,8 @@ Un usuario sin área trabaja en el área "General" (objetos con area = NULL).
 El super administrador elige qué área está viendo (se guarda en la sesión); "Todas" muestra todo
 y lo que cree en ese modo queda en "General".
 """
+from django.conf import settings
+
 from .models import Area, Profile
 
 SESSION_AREA_KEY = "area_view"
@@ -20,8 +22,14 @@ def get_profile(user):
     try:
         return user.profile
     except Profile.DoesNotExist:
-        role = Profile.SUPERADMIN if user.is_superuser else Profile.VIEWER
+        # Usuario nuevo (p. ej. primer ingreso con Microsoft): sin acceso hasta que se le asigne perfil
+        role = Profile.SUPERADMIN if user.is_superuser else settings.NEW_USER_ROLE
         return Profile.objects.create(user=user, role=role)
+
+
+def has_access(user):
+    """Falso para usuarios con perfil "Sin acceso (pendiente)"."""
+    return is_superadmin(user) or get_profile(user).role != Profile.PENDING
 
 
 def is_superadmin(user):

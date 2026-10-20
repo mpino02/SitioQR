@@ -5,7 +5,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const { DEFAULT_DESIGN, buildSvg, svgToDataUrl, download } = window.QRRender;
 
-  const ROLE_LABELS = { superadmin: 'Super admin', admin: 'Administrador', viewer: 'Visualización' };
+  const ROLE_LABELS = { superadmin: 'Super admin', admin: 'Administrador', viewer: 'Visualización', pending: 'Sin acceso' };
   const state = { config: null, view: 'active', folder: null, search: '', sort: 'created', folders: [], templates: [], editing: null, design: null };
 
   // ---------- API ----------
@@ -67,7 +67,18 @@
     $('#roleBadge').textContent = ROLE_LABELS[c.role] || '';
     document.body.classList.toggle('readonly', !c.canEdit);
     $('#adminNav').classList.toggle('hidden', !c.isSuperAdmin);
-    if (state.view === 'users' && !c.isSuperAdmin) state.view = 'active';
+    if ((state.view === 'users' || state.view === 'audit') && !c.isSuperAdmin) state.view = 'active';
+    // Usuario sin acceso: solo un aviso, sin cargar datos (la API respondería 403)
+    const pending = c.role === 'pending';
+    document.body.classList.toggle('pending', pending);
+    if (pending) {
+      $('#areaBadge').classList.add('hidden');
+      $('#crumb').textContent = '';
+      $('#main').innerHTML = `<div class="pending-box"><h1>Acceso pendiente</h1>
+        <p>Tu usuario <b>${esc(c.user || '')}</b> ya está registrado, pero todavía no tiene un perfil asignado.</p>
+        <p class="muted">Pide a un super administrador que te asigne un perfil y un área en “Usuarios y áreas”. Luego vuelve a cargar esta página.</p></div>`;
+      return;
+    }
     $('#areaSel').classList.toggle('hidden', !c.isSuperAdmin);
     $('#areaBadge').classList.toggle('hidden', c.isSuperAdmin);
     if (c.isSuperAdmin) {
@@ -143,7 +154,8 @@
   }
 
   const CRUMBS = { active: ['Códigos QR', 'Activos'], archived: ['Códigos QR', 'Archivados'], stats: ['Códigos QR', 'Estadísticas'],
-    fichas: ['Fichas', 'Fichas PDF'], templates: ['Plantillas', 'Diseños guardados'], users: ['Administración', 'Usuarios y áreas'] };
+    fichas: ['Fichas', 'Fichas PDF'], templates: ['Plantillas', 'Diseños guardados'], users: ['Administración', 'Usuarios y áreas'],
+    audit: ['Administración', 'Historial de cambios'] };
   function setActiveNav() {
     const folder = state.folder && state.folders.find(f => f.id === state.folder);
     const [section, page] = folder ? ['Carpetas', folder.name] : CRUMBS[state.view] || ['', ''];
@@ -154,11 +166,17 @@
 
   async function render() {
     setActiveNav();
-    if (state.view === 'stats') return renderStats();
-    if (state.view === 'templates') return renderTemplates();
-    if (state.view === 'fichas') return window.PYFichas.renderList();
-    if (state.view === 'users') return window.PYUsers.render();
-    return renderList();
+    try {
+      if (state.view === 'stats') return await renderStats();
+      if (state.view === 'templates') return await renderTemplates();
+      if (state.view === 'fichas') return await window.PYFichas.renderList();
+      if (state.view === 'users') return await window.PYUsers.render();
+      if (state.view === 'audit') return await window.PYAudit.render();
+      return await renderList();
+    } catch (err) {
+      // Sin esto, un error del servidor dejaba la sección sin cambiar y sin aviso
+      toast('No se pudo cargar esta sección: ' + err.message, true);
+    }
   }
 
   // ---------- Lista de QR ----------
@@ -244,6 +262,7 @@
         ['Editar', () => openEditor(q, 'content')],
         ['Duplicar', async () => { await api(`/qrs/${q.id}/duplicate`, { method: 'POST' }); toast('QR duplicado'); render(); }],
         ['Mover a carpeta', () => moveDialog(q)],
+        ['Historial de cambios', () => window.PYAudit.showForQr(q)],
         [q.archived ? 'Restaurar (activar)' : 'Archivar (desactivar)', async () => {
           await api('/qrs/' + q.id, { method: 'PUT', body: { archived: !q.archived } });
           toast(q.archived ? 'QR activado' : 'QR archivado: dejará de redirigir'); await loadFolders(); render();

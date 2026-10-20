@@ -4,11 +4,12 @@
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const { api, toast, esc, fmtDate, promptDialog, confirmDialog, reloadSession, ROLE_LABELS } = window.PYQR;
 
-  const ROLE_OPTIONS = ['superadmin', 'admin', 'viewer'];
+  const ROLE_OPTIONS = ['superadmin', 'admin', 'viewer', 'pending'];
   const ROLE_HELP = {
     superadmin: 'Acceso total: todas las áreas, usuarios y áreas',
     admin: 'Crea, edita y elimina en su área',
     viewer: 'Solo ve y descarga en su área',
+    pending: 'No ve nada hasta que se le asigne un perfil',
   };
   const up = { users: [], areas: [], filter: '', tab: 'users' };
 
@@ -21,7 +22,8 @@
     $('#main').innerHTML = `
       <div class="page-head"><h1>Usuarios y áreas</h1></div>
       <div class="tabs page-tabs">
-        <button class="tab" data-utab="users">Usuarios <span class="muted">(${up.users.length})</span></button>
+        <button class="tab" data-utab="users">Usuarios <span class="muted">(${up.users.length})</span>${
+          up.users.some(u => u.role === 'pending') ? ` <span class="pending-tag">${up.users.filter(u => u.role === 'pending').length} pendiente(s)</span>` : ''}</button>
         <button class="tab" data-utab="areas">Áreas <span class="muted">(${up.areas.length})</span></button>
       </div>
 
@@ -69,11 +71,13 @@
   // ---------- Usuarios ----------
   function renderUsers() {
     const f = up.filter.toLowerCase();
-    const list = up.users.filter(u => !f || [u.username, u.email, u.name].some(x => (x || '').toLowerCase().includes(f)));
+    // Los pendientes de autorización van primero
+    const list = up.users.filter(u => !f || [u.username, u.email, u.name].some(x => (x || '').toLowerCase().includes(f)))
+      .sort((a, b) => (b.role === 'pending') - (a.role === 'pending'));
     $('#userList').innerHTML = list.length ? list.map(u => `
-      <div class="urow ${u.active ? '' : 'inactive'}" data-uid="${u.id}">
+      <div class="urow ${u.active ? '' : 'inactive'} ${u.role === 'pending' ? 'is-pending' : ''}" data-uid="${u.id}">
         <div class="uinfo">
-          <div class="uname">${esc(u.name || u.username)}</div>
+          <div class="uname">${esc(u.name || u.username)}${u.role === 'pending' ? ' <span class="pending-tag">Pendiente</span>' : ''}</div>
           <div class="umail">${esc(u.email || u.username)}</div>
           <div class="muted small" title="Último ingreso">${u.lastLogin ? 'Último ingreso: ' + fmtDate(u.lastLogin) : 'Nunca ha entrado'}</div>
         </div>

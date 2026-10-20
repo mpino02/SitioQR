@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 from django.utils.html import format_html
 
 from . import microsoft_auth
-from .models import Area, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat
+from .models import Area, AuditLog, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat
 
 
 @admin.register(QRCode)
@@ -58,6 +58,24 @@ class ProfileAdmin(admin.ModelAdmin):
     list_filter = ("role", "area")
     search_fields = ("user__username", "user__email")
 
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    """Solo lectura: el historial no se puede editar ni borrar desde el admin."""
+    list_display = ("at", "username", "action", "object_type", "object_name", "area", "ip")
+    list_filter = ("action", "object_type", "area")
+    search_fields = ("username", "object_name", "object_id")
+    readonly_fields = [f.name for f in AuditLog._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 # ---------- /admin/ exige haber entrado con Microsoft ----------
 # Si el login con Microsoft está configurado (y ADMIN_REQUIRE_MICROSOFT=true), una sesión iniciada con

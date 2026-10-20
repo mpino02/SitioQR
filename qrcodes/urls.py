@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/fichas/<int:pk>", views.ficha_detail),
     path("api/fichas/<int:pk>/file", views.ficha_file),
     path("api/me/area", views.switch_area),
+    path("api/audit", views.audit_log),
     path("api/users", views.users),
     path("api/users/<int:pk>", views.user_detail),
     path("api/areas", views.areas),

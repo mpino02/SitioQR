@@ -16,9 +16,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import access, microsoft_auth, ratelimit
+from . import access, audit, microsoft_auth, ratelimit
 from .access import scope
-from .models import Area, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat, generate_code
+from .models import Area, AuditLog, DesignTemplate, Ficha, Folder, Profile, QRCode, ScanStat, generate_code
 
 CODE_RE = re.compile(r"^[A-Za-z0-9_-]{3,40}$")
 URL_RE = re.compile(r"^(https?://[^\s]+|mailto:[^\s]+|tel:[^\s]+)$", re.I)
@@ -60,6 +60,8 @@ def api_login_required(view):
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return err("No autorizado", 401)
+        if not access.has_access(request.user):
+            return err("Tu usuario está pendiente de autorización", 403)
         # El perfil Visualización solo puede leer
         if request.method not in ("GET", "HEAD") and not access.can_edit(request.user):
             return err("Tu perfil es de solo visualización", 403)
@@ -222,10 +224,13 @@ def qrs(request):
     if error:
         return err(error)
     try:
-        q = QRCode.objects.create(code=code, name=name, url=url, folder=folder, area=area,
-                                  design=data.get("design") or {}, created_by=request.user)
+        # atomic: si el código ya existe, solo se deshace este INSERT y la conexión sigue usable
+        with transaction.atomic():
+            q = QRCode.objects.create(code=code, name=name, url=url, folder=folder, area=area,
+                                      design=data.get("design") or {}, created_by=request.user)
     except IntegrityError:
         return err("Ese código corto ya existe", 409)
+    audit.record(request, audit.CREATE, "qr", q, changes={"código": [None, q.code], "url": [None, q.url]})
     return JsonResponse(qr_json(q), status=201)
 
 
@@ -236,9 +241,11 @@ def qr_detail(request, pk):
     if request.method == "GET":
         return JsonResponse(qr_json(q))
     if request.method == "DELETE":
+        audit.record(request, audit.DELETE, "qr", q, changes={"código": [q.code, None], "url": [q.url, None]})
         q.delete()
         return JsonResponse({"ok": True})
 
+    before = _qr_snapshot(q)
     data = body(request)
     if "name" in data:
         name = str(data["name"] or "").strip()
@@ -259,7 +266,18 @@ def qr_detail(request, pk):
     if "archived" in data:
         q.archived = bool(data["archived"])
     q.save()
+    changes = audit.diff(before, _qr_snapshot(q))
+    if "diseño" in changes:
+        changes["diseño"] = ["", "modificado"]
+    if changes:
+        audit.record(request, audit.UPDATE, "qr", q, changes=changes)
     return JsonResponse(qr_json(q))
+
+
+def _qr_snapshot(q):
+    # El diseño no se guarda entero (puede traer el logo en base64): solo se marca si cambió
+    return {"nombre": q.name, "url": q.url, "carpeta": q.folder.name if q.folder else None,
+            "archivado": q.archived, "diseño": hash(json.dumps(q.design or {}, sort_keys=True))}
 
 
 @api_login_required
@@ -268,6 +286,7 @@ def qr_duplicate(request, pk):
     q = get_object_or_404(scope(request, QRCode.objects), pk=pk)
     copy = QRCode.objects.create(code=generate_code(), name=f"{q.name} (copia)", url=q.url, area=q.area,
                                  folder=q.folder, design=q.design, created_by=request.user)
+    audit.record(request, audit.DUPLICATE, "qr", copy, changes={"copia de": [None, q.code]})
     return JsonResponse(qr_json(copy), status=201)
 
 
@@ -320,6 +339,7 @@ def folders(request):
     if not name:
         return err("Nombre obligatorio")
     f = Folder.objects.create(name=name, area=access.area_for_new(request))
+    audit.record(request, audit.CREATE, "carpeta", f)
     return JsonResponse({"id": str(f.id), "name": f.name, "count": 0}, status=201)
 
 
@@ -328,11 +348,14 @@ def folders(request):
 def folder_detail(request, pk):
     f = get_object_or_404(scope(request, Folder.objects), pk=pk)
     if request.method == "DELETE":
+        audit.record(request, audit.DELETE, "carpeta", f)
         f.delete()  # los QR quedan sin carpeta (SET_NULL)
         return JsonResponse({"ok": True})
     name = str(body(request).get("name") or "").strip()
     if not name:
         return err("Nombre obligatorio")
+    if name != f.name:
+        audit.record(request, audit.UPDATE, "carpeta", f, name=name, changes={"nombre": [f.name, name]})
     f.name = name
     f.save()
     return JsonResponse({"id": str(f.id), "name": f.name})
@@ -353,13 +376,16 @@ def templates(request):
     if not name or not isinstance(data.get("design"), dict):
         return err("Nombre y diseño obligatorios")
     t = DesignTemplate.objects.create(name=name, design=data["design"], area=access.area_for_new(request))
+    audit.record(request, audit.CREATE, "plantilla", t)
     return JsonResponse(tpl_json(t), status=201)
 
 
 @api_login_required
 @require_http_methods(["DELETE"])
 def template_detail(request, pk):
-    get_object_or_404(scope(request, DesignTemplate.objects), pk=pk).delete()
+    t = get_object_or_404(scope(request, DesignTemplate.objects), pk=pk)
+    audit.record(request, audit.DELETE, "plantilla", t)
+    t.delete()
     return JsonResponse({"ok": True})
 
 
@@ -430,6 +456,7 @@ def fichas(request):
     f = Ficha(name=name[:200], original_name=up.name[:255], size=up.size, folder=folder, area=area, created_by=request.user)
     f.file.save("ficha.pdf", up, save=False)
     f.save()
+    audit.record(request, audit.CREATE, "ficha", f, changes={"archivo": [None, f.original_name]})
     return JsonResponse(ficha_json(f, full=True), status=201)
 
 
@@ -440,11 +467,13 @@ def ficha_detail(request, pk):
     if request.method == "GET":
         return JsonResponse(ficha_json(f, full=True))
     if request.method == "DELETE":
+        audit.record(request, audit.DELETE, "ficha", f)
         f.file.delete(save=False)
         f.delete()
         return JsonResponse({"ok": True})
 
     data = body(request)
+    before = {"nombre": f.name, "carpeta": f.folder.name if f.folder else None, "QR posicionados": len(f.placements or [])}
     if "name" in data:
         name = str(data["name"] or "").strip()
         if not name:
@@ -462,6 +491,10 @@ def ficha_detail(request, pk):
             return err(error)
         f.placements = placements
     f.save()
+    changes = audit.diff(before, {"nombre": f.name, "carpeta": f.folder.name if f.folder else None,
+                                  "QR posicionados": len(f.placements or [])})
+    if changes or "placements" in data:
+        audit.record(request, audit.UPDATE, "ficha", f, changes=changes)
     return JsonResponse(ficha_json(f, full=True))
 
 
@@ -490,6 +523,12 @@ def user_json(u):
         "areaId": str(p.area_id) if p.area_id else None,
         "lastLogin": u.last_login.isoformat() if u.last_login else None,
     }
+
+
+def _user_snapshot(u):
+    p = access.get_profile(u)
+    return {"perfil": Profile.SUPERADMIN if u.is_superuser else p.role,
+            "área": p.area.name if p.area else "General", "activo": u.is_active}
 
 
 def _apply_profile(user, data, me):
@@ -540,6 +579,7 @@ def users(request):
         if error:
             transaction.set_rollback(True)
             return err(error)
+        audit.record(request, audit.CREATE, "usuario", u, area=None, changes=audit.diff({}, _user_snapshot(u)))
     return JsonResponse(user_json(u), status=201)
 
 
@@ -547,11 +587,15 @@ def users(request):
 @require_http_methods(["PUT"])
 def user_detail(request, pk):
     u = get_object_or_404(User, pk=pk)
+    before = _user_snapshot(u)
     with transaction.atomic():
         error = _apply_profile(u, body(request), request.user)
         if error:
             transaction.set_rollback(True)
             return err(error)
+        changes = audit.diff(before, _user_snapshot(u))
+        if changes:
+            audit.record(request, audit.UPDATE, "usuario", u, area=None, changes=changes)
     return JsonResponse(user_json(u))
 
 
@@ -569,7 +613,9 @@ def areas(request):
         return err("Nombre obligatorio")
     if Area.objects.filter(name__iexact=name).exists():
         return err("Ya existe un área con ese nombre", 409)
-    return JsonResponse(area_full_json(Area.objects.create(name=name)), status=201)
+    a = Area.objects.create(name=name)
+    audit.record(request, audit.CREATE, "area", a, area=a)
+    return JsonResponse(area_full_json(a), status=201)
 
 
 @superadmin_required
@@ -578,17 +624,21 @@ def area_detail(request, pk):
     a = get_object_or_404(Area, pk=pk)
     if request.method == "DELETE":
         try:
-            a.delete()
+            with transaction.atomic():
+                a.delete()
         except ProtectedError:
             return err("El área tiene usuarios, QR, carpetas, fichas o plantillas. Muévelos o elimínalos antes.", 409)
         if request.session.get(access.SESSION_AREA_KEY) == str(pk):
             request.session[access.SESSION_AREA_KEY] = access.ALL
+        audit.record(request, audit.DELETE, "area", name=a.name, object_id=pk)
         return JsonResponse({"ok": True})
     name = str(body(request).get("name") or "").strip()[:120]
     if not name:
         return err("Nombre obligatorio")
     if Area.objects.filter(name__iexact=name).exclude(pk=pk).exists():
         return err("Ya existe un área con ese nombre", 409)
+    if name != a.name:
+        audit.record(request, audit.UPDATE, "area", a, name=name, area=a, changes={"nombre": [a.name, name]})
     a.name = name
     a.save()
     return JsonResponse(area_full_json(a))
@@ -603,3 +653,41 @@ def switch_area(request):
         return err("Área no encontrada")
     request.session[access.SESSION_AREA_KEY] = value
     return JsonResponse({"ok": True})
+
+
+# ---------- historial de cambios ----------
+def audit_json(e, with_ip=False):
+    data = {
+        "id": str(e.id), "at": e.at.isoformat(), "user": e.username or "—", "action": e.action,
+        "objectType": e.object_type, "objectId": e.object_id, "objectName": e.object_name,
+        "area": e.area.name if e.area else ("General" if e.object_type not in ("usuario", "area") else ""),
+        "changes": e.changes,
+    }
+    if with_ip:
+        data["ip"] = e.ip
+    return data
+
+
+@api_login_required
+@require_GET
+def audit_log(request):
+    """?qr=<id>: historial de un QR (cualquiera que pueda ver ese QR). Sin qr: todo, solo super administrador."""
+    superadmin = access.is_superadmin(request.user)
+    qs = AuditLog.objects.select_related("area")
+    qr_id = request.GET.get("qr")
+    if qr_id:
+        q = get_object_or_404(scope(request, QRCode.objects), pk=qr_id)
+        qs = qs.filter(object_type="qr", object_id=str(q.pk))
+    elif not superadmin:
+        return err("Solo el super administrador puede ver el historial completo", 403)
+    else:
+        if request.GET.get("type"):
+            qs = qs.filter(object_type=request.GET["type"])
+        if request.GET.get("q"):
+            t = request.GET["q"]
+            qs = qs.filter(Q(object_name__icontains=t) | Q(username__icontains=t) | Q(object_id=t))
+    try:
+        limit = max(1, min(int(request.GET.get("limit", 200)), 500))
+    except ValueError:
+        limit = 200
+    return JsonResponse([audit_json(e, with_ip=superadmin) for e in qs[:limit]], safe=False)
