@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "qrcodes.security.ContentSecurityPolicyMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -166,11 +167,37 @@ LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW", str(15 * 60)))
 # Caché en la base de datos: compartido entre procesos e instancias (se crea con "manage.py createcachetable")
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "django_cache"}}
 
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
+# Sesión: se cierra tras SESSION_IDLE_HOURS sin actividad (cada visita renueva el plazo)
+SESSION_COOKIE_AGE = int(float(os.environ.get("SESSION_IDLE_HOURS", "8")) * 3600)
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
 if PUBLIC_BASE_URL.startswith("https") and not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # HSTS: el navegador recordará usar solo HTTPS en este dominio. Solo este dominio
+    # (no subdominios de constructoracarran.cl) y sin "preload". Empieza con 1 día; luego subir a 1 año.
+    SECURE_HSTS_SECONDS = int(os.environ.get("HSTS_SECONDS", str(24 * 3600)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
+# Content-Security-Policy: de dónde puede cargar scripts, estilos, imágenes, etc. la página.
+# CSP_REPORT_ONLY=true solo informa en la consola del navegador sin bloquear (útil para probar).
+CSP = os.environ.get("CSP", "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",  # estilos en línea generados por el panel
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",  # vistas previas de QR y logos en data:
+    "worker-src 'self' blob:",  # worker de pdf.js
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+]))
+CSP_REPORT_ONLY = env_bool("CSP_REPORT_ONLY", False)
 
 # Errores a la consola: en Azure se ven en "Secuencia de registro" (Log stream)
 LOGGING = {

@@ -222,8 +222,10 @@ def qrs(request):
     if error:
         return err(error)
     try:
-        q = QRCode.objects.create(code=code, name=name, url=url, folder=folder, area=area,
-                                  design=data.get("design") or {}, created_by=request.user)
+        # atomic: si el código ya existe, solo se deshace este INSERT y la conexión sigue usable
+        with transaction.atomic():
+            q = QRCode.objects.create(code=code, name=name, url=url, folder=folder, area=area,
+                                      design=data.get("design") or {}, created_by=request.user)
     except IntegrityError:
         return err("Ese código corto ya existe", 409)
     return JsonResponse(qr_json(q), status=201)

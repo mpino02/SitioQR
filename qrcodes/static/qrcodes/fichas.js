@@ -5,7 +5,7 @@
   const { state, api, toast, esc, fmtDate, openDialog, promptDialog, confirmDialog, showMenu } = window.PYQR;
   const { buildSvg, svgToDataUrl, svgSize, rasterize, downloadUrl, safeName } = window.QRRender;
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc = window.PDFJS_WORKER;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = document.querySelector('meta[name="pdfjs-worker"]').content;
 
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
@@ -44,7 +44,7 @@
   }
 
   // pdf.js transfiere el buffer al worker, por eso siempre recibe una copia
-  const openPdf = bytes => pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise;
+  const openPdf = bytes => pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)), isEvalSupported: false }).promise;
 
   // ---------- Lista de fichas ----------
   async function renderList() {

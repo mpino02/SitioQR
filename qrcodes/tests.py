@@ -312,3 +312,15 @@ class AdminAndRateLimitTests(TestCase):
         from .ratelimit import client_ip
         req = RequestFactory().get("/", HTTP_X_FORWARDED_FOR="200.68.57.83:51234, 10.0.0.1")
         self.assertEqual(client_ip(req), "200.68.57.83")
+
+
+class SecurityHeadersTests(TestCase):
+    def test_csp_header_present(self):
+        csp = self.client.get("/").headers.get("Content-Security-Policy", "")
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("frame-ancestors 'none'", csp)
+
+    def test_session_is_idle_based(self):
+        from django.conf import settings
+        self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
+        self.assertLessEqual(settings.SESSION_COOKIE_AGE, 24 * 3600)
