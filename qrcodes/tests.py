@@ -319,6 +319,8 @@ class SecurityHeadersTests(TestCase):
         csp = self.client.get("/").headers.get("Content-Security-Policy", "")
         self.assertIn("script-src 'self'", csp)
         self.assertIn("frame-ancestors 'none'", csp)
+        # qr-code-styling lee el logo (data:) con XMLHttpRequest: sin esto el logo no aparece en el QR
+        self.assertIn("connect-src 'self' data:", csp)
 
     def test_session_is_idle_based(self):
         from django.conf import settings

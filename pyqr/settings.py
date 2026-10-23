@@ -193,7 +193,7 @@ CSP = os.environ.get("CSP", "; ".join([
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",  # vistas previas de QR y logos en data:
     "worker-src 'self' blob:",  # worker de pdf.js
-    "connect-src 'self'",
+    "connect-src 'self' data:",  # data: = qr-code-styling lee el logo (data:) con XMLHttpRequest para incrustarlo
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
